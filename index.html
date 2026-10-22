@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#05070a">
   <title>Portal Clone · Test Chamber 01</title>
   <meta name="description" content="A browser puzzle game in the spirit of Portal: place two linked portals and get the cube to the button.">
   <link rel="stylesheet" href="style.css">
@@ -29,13 +30,34 @@
     <div id="debug"></div>
   </div>
 
+  <div id="touch" hidden>
+    <div class="stick" aria-hidden="true"><div class="stick-knob"></div></div>
+    <div class="stick-hint" aria-hidden="true"></div>
+    <button class="tbtn pause" data-act="pause" aria-label="Pause"><span></span><span></span></button>
+    <div class="cluster">
+      <button class="tbtn small use" data-act="use">Grab</button>
+      <button class="tbtn small jump" data-act="jump">Jump</button>
+      <button class="tbtn fire blue" data-act="fire0" aria-label="Fire blue portal"><i></i></button>
+      <button class="tbtn fire orange" data-act="fire1" aria-label="Fire orange portal"><i></i></button>
+    </div>
+  </div>
+
+  <div id="rotate" hidden>Turn your phone sideways for a wider view</div>
+
   <div id="overlay" class="screen">
     <div class="panel">
       <div class="badge"><span class="dot blue"></span><span class="dot orange"></span></div>
       <h1>PORTAL <span>CLONE</span></h1>
       <p id="overlay-title" class="chamber">Test Chamber 01</p>
       <button id="play">Click to begin testing</button>
-      <table class="controls">
+      <table class="controls touch-only">
+        <tr><td>Left thumb</td><td>Move</td></tr>
+        <tr><td>Drag on the right</td><td>Look</td></tr>
+        <tr><td>Blue / orange</td><td>Fire a portal</td></tr>
+        <tr><td>Grab</td><td>Pick up / drop cube</td></tr>
+        <tr><td>Jump</td><td>Jump</td></tr>
+      </table>
+      <table class="controls desktop-only">
         <tr><td>Mouse</td><td>Look</td></tr>
         <tr><td>W A S D</td><td>Move</td></tr>
         <tr><td>Space</td><td>Jump</td></tr>

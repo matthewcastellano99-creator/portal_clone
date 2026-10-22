@@ -2,11 +2,11 @@ import * as THREE from 'three';
 import { whitePanels, metalPanels, floorTiles } from './textures.js';
 
 // Surface materials, keyed by the names used in the level definition.
-export function createMaterials(renderer) {
+export function createMaterials(renderer, textureSize = 1024) {
   const aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
-  const white = whitePanels();
-  const metal = metalPanels();
-  const floor = floorTiles();
+  const white = whitePanels(textureSize);
+  const metal = metalPanels(textureSize);
+  const floor = floorTiles(textureSize);
   for (const set of [white, metal, floor]) {
     for (const t of Object.values(set)) if (t) t.anisotropy = aniso;
   }

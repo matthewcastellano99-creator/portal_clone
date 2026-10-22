@@ -11,14 +11,14 @@ import { PORTAL } from './config.js';
 // deepest first, ping-ponging between P's final target and a shared scratch
 // target, and each level is scissored to where P appears on screen.
 export class PortalRenderer {
-  constructor(renderer, scene, portals, { samples = 0 } = {}) {
+  constructor(renderer, scene, portals, { samples = 0, type = THREE.HalfFloatType } = {}) {
     this.renderer = renderer;
     this.scene = scene;
     this.portals = portals;
     this.cam = new THREE.PerspectiveCamera();
     this.cam.matrixAutoUpdate = false;
     this.cam.layers.enable(1); // third-person player model is on layer 1
-    const opts = { type: THREE.HalfFloatType, depthBuffer: true };
+    const opts = { type, depthBuffer: true };
     this.finals = portals.map(() => new THREE.WebGLRenderTarget(1, 1, { ...opts, samples }));
     this.scratch = new THREE.WebGLRenderTarget(1, 1, opts);
     this.width = 1;

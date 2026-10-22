@@ -123,6 +123,7 @@ export class ViewModel {
 
   setSize(aspect) {
     this.camera.aspect = aspect;
+    this.camera.fov = aspect < 1 ? 80 : 54; // portrait screens are narrow
     this.camera.updateProjectionMatrix();
   }
 }

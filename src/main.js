@@ -19,6 +19,7 @@ import { ViewModel } from './gun.js';
 import { Avatar } from './avatar.js';
 import { Effects } from './effects.js';
 import { Sfx } from './audio.js';
+import { TouchControls } from './touch.js';
 
 // Draws a second scene (the first-person gun) over the main image.
 class OverlayPass extends Pass {
@@ -40,11 +41,19 @@ class OverlayPass extends Pass {
 }
 
 const params = new URLSearchParams(location.search);
-const LOW_QUALITY = params.get('quality') === 'low';
-if (LOW_QUALITY) PORTAL.maxRecursion = 2;
+const TOUCH = window.matchMedia('(pointer: coarse)').matches;
+
+// Phones and tablets get lighter settings; ?quality=high|mobile|low overrides.
+const PRESETS = {
+  high: { pixelRatio: RENDER.maxPixelRatio, recursion: 4, composerSamples: 4, portalSamples: 2, shadowMap: 2048, texture: 1024 },
+  mobile: { pixelRatio: 1.25, recursion: 3, composerSamples: 4, portalSamples: 0, shadowMap: 1024, texture: 512 },
+  low: { pixelRatio: 1, recursion: 2, composerSamples: 0, portalSamples: 0, shadowMap: 1024, texture: 512 },
+};
+const QUALITY = PRESETS[params.get('quality')] ?? (TOUCH ? PRESETS.mobile : PRESETS.high);
+PORTAL.maxRecursion = QUALITY.recursion;
 
 class Game {
-  constructor() {
+  constructor(saved = {}) {
     this.canvas = document.getElementById('game');
     this.ui = {
       overlay: document.getElementById('overlay'),
@@ -59,7 +68,10 @@ class Game {
       chOrange: document.getElementById('ch-orange'),
       debug: params.has('debug') ? document.getElementById('debug') : null,
       loading: document.getElementById('loading'),
+      rotate: document.getElementById('rotate'),
     };
+    document.body.classList.toggle('touch', TOUCH);
+    if (TOUCH) this.ui.play.textContent = 'Tap to begin testing';
 
     this.initRenderer();
     this.initWorld();
@@ -74,6 +86,7 @@ class Game {
     this.hintTimer = 0;
     this.subtitleTimer = 0;
     this.restart();
+    this.restore(saved);
 
     window.__game = this;
     if (params.has('autostart')) this.begin(false);
@@ -83,7 +96,13 @@ class Game {
 
   initRenderer() {
     const renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: false, powerPreference: 'high-performance' });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, LOW_QUALITY ? 1 : RENDER.maxPixelRatio));
+    this.maxPixelRatio = Math.min(window.devicePixelRatio, QUALITY.pixelRatio);
+    renderer.setPixelRatio(this.maxPixelRatio);
+    // Some mobile GPUs can't render into half-float targets; fall back to
+    // 8-bit targets (and no bloom, which needs them) there.
+    const ext = renderer.extensions;
+    this.halfFloat = ext.has('EXT_color_buffer_half_float') || ext.has('EXT_color_buffer_float');
+    this.targetType = this.halfFloat ? THREE.HalfFloatType : THREE.UnsignedByteType;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.0;
     renderer.shadowMap.enabled = true;
@@ -105,7 +124,7 @@ class Game {
     sun.position.set(2, 30, 5);
     sun.target.position.set(-4, 0, 0);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.mapSize.set(QUALITY.shadowMap, QUALITY.shadowMap);
     const sc = sun.shadow.camera;
     sc.left = -17; sc.right = 17; sc.top = 17; sc.bottom = -17;
     sc.near = 5; sc.far = 60;
@@ -118,26 +137,27 @@ class Game {
     corridor.position.set(-13.5, 6.5, -8.5);
     scene.add(corridor);
 
-    this.composerTarget = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: LOW_QUALITY ? 0 : 4 });
+    this.composerTarget = new THREE.WebGLRenderTarget(1, 1, { type: this.targetType, samples: QUALITY.composerSamples });
     this.composer = new EffectComposer(renderer, this.composerTarget);
     this.composer.addPass(new RenderPass(scene, this.camera));
     this.viewModel = new ViewModel(1);
     this.composer.addPass(new OverlayPass(this.viewModel.scene, this.viewModel.camera));
-    const { strength, radius, threshold } = RENDER.bloom;
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), strength, radius, threshold);
-    this.composer.addPass(this.bloom);
+    if (this.halfFloat) {
+      const { strength, radius, threshold } = RENDER.bloom;
+      this.composer.addPass(new UnrealBloomPass(new THREE.Vector2(256, 256), strength, radius, threshold));
+    }
     this.composer.addPass(new OutputPass());
   }
 
   initWorld() {
     const scene = this.scene;
     this.physics = new PhysicsWorld();
-    this.materials = createMaterials(this.renderer);
+    this.materials = createMaterials(this.renderer, QUALITY.texture);
     buildLevel(scene, this.physics, this.materials);
 
     this.resolution = new THREE.Vector2(1, 1);
     this.portals = new PortalSystem(scene, this.physics, this.resolution);
-    this.portalRenderer = new PortalRenderer(this.renderer, scene, this.portals.portals, { samples: LOW_QUALITY ? 0 : 2 });
+    this.portalRenderer = new PortalRenderer(this.renderer, scene, this.portals.portals, { samples: QUALITY.portalSamples, type: this.targetType });
 
     this.player = new Player();
     this.cube = new WeightedCube(scene, LEVEL.cube);
@@ -161,27 +181,73 @@ class Game {
 
   initInput() {
     window.addEventListener('resize', () => this.onResize());
+    window.visualViewport?.addEventListener('resize', () => this.onResize());
     this.ui.play.addEventListener('click', () => this.begin(true));
     this.ui.replay.addEventListener('click', () => {
       this.restart();
       this.begin(true);
     });
-    this.canvas.addEventListener('click', () => {
-      if (this.state.started && !this.state.completed && document.pointerLockElement !== this.canvas) this.begin(true);
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && this.state.started && !this.state.paused && !this.state.completed) this.pause();
+      if (!document.hidden && !this.state.paused) this.keepAwake();
+    });
+
+    this.touch = new TouchControls(document.getElementById('touch'), {
+      onLook: (dx, dy) => this.look(dx, dy),
+      onFire: (id) => this.shoot(id),
+      onUse: () => this.use(),
+      onPause: () => this.pause(),
+    });
+    // A touch anywhere switches to the on-screen controls (e.g. on a laptop
+    // with a touch screen), the mouse switches back.
+    window.addEventListener('pointerdown', (e) => {
+      const touch = e.pointerType === 'touch';
+      if (touch !== document.body.classList.contains('touch')) {
+        document.body.classList.toggle('touch', touch);
+        this.touch.enabled = touch && !this.state.paused;
+      }
+    }, true);
+
+    // Mouse: pointer lock when the browser allows it. Where it doesn't (some
+    // embedded views), drag to look and click without dragging to fire.
+    this.pointerLockFailed = !('requestPointerLock' in this.canvas);
+    this.drag = null;
+    document.addEventListener('pointerlockerror', () => {
+      this.pointerLockFailed = true;
     });
     document.addEventListener('pointerlockchange', () => {
       const locked = document.pointerLockElement === this.canvas;
       if (!locked && this.state.started && !this.state.completed && !params.has('autostart')) this.pause();
     });
-    document.addEventListener('mousemove', (e) => {
-      if (document.pointerLockElement !== this.canvas) return;
-      this.player.look(e.movementX, e.movementY);
-      this.viewModel.addSway(e.movementX, e.movementY);
+    this.canvas.addEventListener('mousedown', (e) => {
+      if (this.state.paused || this.state.completed) return;
+      if (document.pointerLockElement === this.canvas) {
+        if (e.button === 0) this.shoot(0);
+        else if (e.button === 2) this.shoot(1);
+      } else if (this.pointerLockFailed) {
+        this.drag = { x: e.clientX, y: e.clientY, moved: 0, button: e.button };
+      } else {
+        this.begin(true);
+      }
     });
-    document.addEventListener('mousedown', (e) => {
-      if (document.pointerLockElement !== this.canvas || this.state.paused) return;
-      if (e.button === 0) this.shoot(0);
-      else if (e.button === 2) this.shoot(1);
+    document.addEventListener('mousemove', (e) => {
+      if (document.pointerLockElement === this.canvas) {
+        this.look(e.movementX, e.movementY);
+      } else if (this.drag) {
+        const dx = e.clientX - this.drag.x, dy = e.clientY - this.drag.y;
+        this.drag.moved += Math.abs(dx) + Math.abs(dy);
+        this.drag.x = e.clientX;
+        this.drag.y = e.clientY;
+        this.look(dx * 1.5, dy * 1.5);
+      }
+    });
+    document.addEventListener('mouseup', () => {
+      if (!this.drag) return;
+      if (this.drag.moved < 6 && !this.state.paused) {
+        if (this.drag.button === 0) this.shoot(0);
+        else if (this.drag.button === 2) this.shoot(1);
+      }
+      this.drag = null;
     });
     document.addEventListener('contextmenu', (e) => e.preventDefault());
     window.addEventListener('keydown', (e) => {
@@ -201,16 +267,48 @@ class Game {
     this.state.paused = false;
     this.ui.overlay.classList.add('hidden');
     this.ui.complete.classList.add('hidden');
-    if (lock) this.canvas.requestPointerLock?.();
+    const touch = document.body.classList.contains('touch');
+    this.touch.enabled = touch;
+    if (touch) {
+      // Full screen and landscape where the browser allows it (Android).
+      const el = document.documentElement;
+      if (lock && !document.fullscreenElement && el.requestFullscreen) {
+        el.requestFullscreen({ navigationUI: 'hide' })
+          .then(() => screen.orientation?.lock?.('landscape'))
+          .catch(() => {});
+      }
+    } else if (lock && !this.pointerLockFailed) {
+      // Older browsers return undefined here instead of a promise.
+      this.canvas.requestPointerLock()?.catch?.(() => {
+        this.pointerLockFailed = true;
+      });
+    }
+    this.keepAwake();
     if (this.subtitleTimer === 0) this.say('Test Chamber 01. Bring the Weighted Cube to the button to open the exit.', 7);
   }
 
   pause() {
     this.state.paused = true;
     this.keys.clear();
+    this.drag = null;
+    this.touch.enabled = false;
     this.ui.overlayTitle.textContent = 'Paused';
-    this.ui.play.textContent = 'Click to resume';
+    this.ui.play.textContent = document.body.classList.contains('touch') ? 'Tap to resume' : 'Click to resume';
     this.ui.overlay.classList.remove('hidden');
+  }
+
+  // Stop the screen dimming while playing on a phone. Optional everywhere.
+  keepAwake() {
+    if (!navigator.wakeLock || this.wakeLock) return;
+    navigator.wakeLock.request('screen').then((lock) => {
+      this.wakeLock = lock;
+      lock.addEventListener('release', () => (this.wakeLock = null));
+    }).catch(() => {});
+  }
+
+  look(dx, dy) {
+    this.player.look(dx, dy);
+    this.viewModel.addSway(dx, dy);
   }
 
   restart() {
@@ -232,9 +330,15 @@ class Game {
 
   onResize() {
     const w = window.innerWidth, h = window.innerHeight;
+    this.renderer.setPixelRatio(this.pixelRatio ?? this.maxPixelRatio);
     this.renderer.setSize(w, h);
     this.camera.aspect = w / h;
+    // In portrait, widen the view so the sides aren't cut off as much.
+    const hfov = 2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(RENDER.fov) / 2) * 16 / 9);
+    const vfov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(hfov / 2) / this.camera.aspect));
+    this.camera.fov = THREE.MathUtils.clamp(vfov, RENDER.fov, 95);
     this.camera.updateProjectionMatrix();
+    this.ui.rotate.hidden = !(TOUCH && h > w);
     this.composer.setPixelRatio(this.renderer.getPixelRatio());
     this.composer.setSize(w, h);
     const pr = this.renderer.getPixelRatio();
@@ -247,10 +351,11 @@ class Game {
   input() {
     const k = this.keys;
     const down = (...codes) => codes.some((c) => k.has(c));
+    const t = this.touch;
     return {
-      forward: (down('KeyW', 'ArrowUp') ? 1 : 0) - (down('KeyS', 'ArrowDown') ? 1 : 0),
-      strafe: (down('KeyD', 'ArrowRight') ? 1 : 0) - (down('KeyA', 'ArrowLeft') ? 1 : 0),
-      jump: down('Space'),
+      forward: THREE.MathUtils.clamp((down('KeyW', 'ArrowUp') ? 1 : 0) - (down('KeyS', 'ArrowDown') ? 1 : 0) + t.move.y, -1, 1),
+      strafe: THREE.MathUtils.clamp((down('KeyD', 'ArrowRight') ? 1 : 0) - (down('KeyA', 'ArrowLeft') ? 1 : 0) + t.move.x, -1, 1),
+      jump: down('Space') || t.jump,
     };
   }
 
@@ -387,6 +492,7 @@ class Game {
     const dt = Math.min(this.timer.getDelta(), 0.1);
     this.elapsed += dt;
     if (!this.state.paused && !this.state.completed) {
+      this.adaptResolution(dt);
       this.state.time += dt;
       this.accumulator += dt;
       let steps = 0;
@@ -399,6 +505,39 @@ class Game {
     }
     this.frameUpdate(dt);
     this.render();
+  }
+
+  // Lower the render resolution while frames take too long and raise it again
+  // when there is headroom. Checked every two seconds of play.
+  adaptResolution(dt) {
+    const s = this.frames ?? (this.frames = { sum: 0, n: 0, prev: 0, lowered: false, floor: 0.6 });
+    s.sum += dt;
+    s.n++;
+    if (s.sum < 2) return;
+    const avg = s.sum / s.n;
+    s.sum = s.n = 0;
+    const cur = this.pixelRatio ?? this.maxPixelRatio;
+    let next = cur;
+    if (avg > 1 / 45) {
+      if (s.lowered && avg > s.prev * 0.92) {
+        // Lowering didn't help, so the frame rate is capped by something else
+        // (a battery saver, a 30 Hz screen). Go back up and stay there.
+        next = Math.min(this.maxPixelRatio, cur / 0.85);
+        s.floor = next;
+        s.lowered = false;
+      } else if (cur * 0.85 >= s.floor) {
+        next = cur * 0.85;
+        s.lowered = true;
+      }
+    } else {
+      s.lowered = false;
+      if (avg < 1 / 57) next = Math.min(this.maxPixelRatio, cur * 1.1);
+    }
+    s.prev = avg;
+    if (Math.abs(next - cur) > 0.01) {
+      this.pixelRatio = next;
+      this.onResize();
+    }
   }
 
   // Advance the simulation (also used by tests through window.__game).
@@ -594,12 +733,20 @@ class Game {
   }
 
   updateHint() {
+    const touch = document.body.classList.contains('touch');
     let text = '';
+    let grabbable = false;
     if (this.state.started && !this.state.completed) {
-      if (this.cube.held) text = 'E — drop cube';
-      else if (this.lookAtCube()) text = this.standingOnCube() ? '' : 'E — pick up cube';
-      else if (this.state.time < 12 && this.state.portalsFired === 0) text = 'Left click — blue portal  ·  Right click — orange portal';
+      if (this.cube.held) {
+        text = touch ? 'Grab — drop cube' : 'E — drop cube';
+      } else if (this.lookAtCube() && !this.standingOnCube()) {
+        grabbable = true;
+        text = touch ? 'Grab — pick up cube' : 'E — pick up cube';
+      } else if (this.state.time < 12 && this.state.portalsFired === 0) {
+        text = touch ? 'Tap the blue and orange buttons to fire portals' : 'Left click — blue portal  ·  Right click — orange portal';
+      }
     }
+    this.touch.setGrabReady(grabbable || this.cube.held);
     if (this.ui.hint.textContent !== text) this.ui.hint.textContent = text;
     this.ui.hint.classList.toggle('show', !!text);
   }
@@ -608,6 +755,51 @@ class Game {
     this.ui.subtitle.textContent = text;
     this.ui.subtitle.classList.add('show');
     this.subtitleTimer = seconds;
+  }
+
+  // ---------------------------------------------------------------- saving
+
+  // Snapshot kept across a live reload of the page.
+  serialize() {
+    const p = this.player, c = this.cube;
+    return {
+      player: { pos: p.body.pos.toArray(), vel: p.body.vel.toArray(), yaw: p.yaw, pitch: p.pitch },
+      cube: { pos: c.body.pos.toArray() },
+      portals: this.portals.portals.map((P) => (P.placed
+        ? { pos: P.pos.toArray(), axis: P.axis, sign: P.sign, plane: P.plane, up: P.up.toArray(), right: P.right.toArray() }
+        : null)),
+      state: { started: this.state.started, completed: this.state.completed, time: this.state.time, portalsFired: this.state.portalsFired },
+    };
+  }
+
+  restore(saved) {
+    if (!saved?.player || saved.state?.completed) return;
+    try {
+      const p = this.player;
+      p.body.pos.fromArray(saved.player.pos);
+      p.body.vel.fromArray(saved.player.vel);
+      p.yaw = saved.player.yaw;
+      p.pitch = saved.player.pitch;
+      this.cube.body.pos.fromArray(saved.cube.pos);
+      saved.portals.forEach((d, i) => {
+        if (!d) return;
+        const P = this.portals.portals[i];
+        P.place(new THREE.Vector3().fromArray(d.pos), d.axis, d.sign, d.plane, new THREE.Vector3().fromArray(d.up), new THREE.Vector3().fromArray(d.right));
+        P.open = 1;
+      });
+      this.portals.refresh();
+      this.physics.depenetrate(p.body);
+      Object.assign(this.state, { time: saved.state.time, portalsFired: saved.state.portalsFired });
+      this.updateCrosshair();
+      if (saved.state.started) {
+        this.state.started = true;
+        this.subtitleTimer = -1;
+        this.pause();
+      }
+    } catch (err) {
+      console.warn('Could not restore the saved game', err);
+      this.restart();
+    }
   }
 }
 
@@ -631,11 +823,21 @@ function rayBox(origin, dir, box) {
   return Math.max(tmin, 0);
 }
 
-try {
-  new Game();
-} catch (err) {
-  console.error(err);
-  const el = document.getElementById('loading');
-  el.textContent = 'This game needs WebGL 2. ' + err.message;
-  el.classList.remove('hidden');
+let game = null;
+
+function start(saved) {
+  try {
+    game = new Game(saved ?? {});
+  } catch (err) {
+    console.error(err);
+    const el = document.getElementById('loading');
+    el.textContent = 'This game needs WebGL 2. ' + err.message;
+    el.classList.remove('hidden');
+  }
 }
+
+// When hosted as a Claude artifact, keep the game's state across live updates.
+const hot = window.claude?.hot;
+hot?.snapshot?.(() => game?.serialize());
+if (hot?.ready) hot.ready(start);
+else start(hot?.data ?? {});
