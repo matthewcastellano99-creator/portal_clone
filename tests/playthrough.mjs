@@ -162,6 +162,59 @@ const fuzz = await page.evaluate(() => {
   return { trials, transits, problems };
 });
 result.portalExitsClear = fuzz.problems.length === 0 && fuzz.transits >= 80;
+
+// From the button platform, portals aimed anywhere on the wall behind it must
+// be walkable: they slide down to the floor, and a small lip is stepped over.
+const walkIn = await page.evaluate(() => {
+  const g = window.__game;
+  const lookAt = (x, y, z) => {
+    const e = g.player.eye, dx = x - e.x, dy = y - e.y, dz = z - e.z;
+    g.player.yaw = Math.atan2(-dx, -dz);
+    g.player.pitch = Math.asin(dy / Math.hypot(dx, dy, dz));
+  };
+  const walkUntilTeleport = () => {
+    let n = 0;
+    const orig = g.onPlayerTeleport;
+    g.onPlayerTeleport = (P) => { n++; orig.call(g, P); };
+    for (let i = 0; i < 480 && !n; i++) g.step(1 / 120, { forward: 1, strafe: 0, jump: false });
+    g.onPlayerTeleport = orig;
+    return n > 0;
+  };
+  const [blue, orange] = g.portals.portals;
+  const v = (x, y, z) => g.player.body.pos.clone().set(x, y, z);
+  let tries = 0, through = 0;
+  for (const [px, pz] of [[-5, -9.5], [-2, -7], [-8, -10]]) {
+    for (const ledgeY of [4.6, 7.5]) {
+      for (const [wx, wy] of [[-6.5, 4.5], [-5, 6.8], [-3.5, 7.3]]) {
+        g.restart();
+        g.player.body.pos.set(px, 4.9001, pz);
+        lookAt(9, ledgeY, 4); g.shoot(0);
+        lookAt(wx, wy, -11); g.shoot(1);
+        lookAt(orange.pos.x, g.player.eye.y, orange.pos.z);
+        tries++;
+        if (blue.placed && orange.placed && walkUntilTeleport()) through++;
+      }
+    }
+  }
+  // A portal whose bottom edge sits a little above the floor is stepped into;
+  // a high one still needs a jump.
+  const lip = (h) => {
+    g.restart();
+    orange.place(v(-5, 5.1 + h, -11), 2, 1, -11, v(0, 1, 0), v(1, 0, 0));
+    blue.place(v(9, 5.1, 4), 0, -1, 9, v(0, 1, 0), v(0, 0, 1));
+    g.portals.refresh();
+    g.player.body.pos.set(-5, 4.9001, -8.5);
+    g.player.yaw = 0;
+    g.player.pitch = 0;
+    return walkUntilTeleport();
+  };
+  const result = { tries, through, smallLip: lip(0.3), bigLip: lip(0.6) };
+  g.restart();
+  return result;
+});
+result.platformPortalsWalkable = walkIn.through === walkIn.tries;
+result.stepsOverSmallLip = walkIn.smallLip && !walkIn.bigLip;
+console.log(`Platform walk-in: ${walkIn.through}/${walkIn.tries} went through`);
 if (fuzz.problems.length) console.error('Portal exit problems:', JSON.stringify(fuzz.problems.slice(0, 5), null, 1));
 console.log(`Portal fuzz: ${fuzz.transits} transits in ${fuzz.trials} trials, ${fuzz.problems.length} problems`);
 

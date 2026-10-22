@@ -76,6 +76,7 @@ export class Player {
       this.accelerate(wish, wishSpeed, PLAYER.airAccel, dt);
     }
     v.y = Math.max(v.y - PHYSICS.gravity * dt, -PHYSICS.maxFallSpeed);
+    if (wasOnGround) this.stepIntoPortal(physics);
 
     const fallSpeed = -v.y;
     physics.moveBody(body, dt, {
@@ -89,6 +90,25 @@ export class Player {
 
     this.speed = Math.hypot(v.x, v.z);
     if (body.onGround) this.walkPhase += this.speed * dt * 1.9;
+  }
+
+  // Walking into a wall portal whose bottom edge is a little above the feet
+  // lifts the player in, the way you'd step onto a low ledge, instead of
+  // leaving them pressed against the wall below it.
+  stepIntoPortal(physics) {
+    const body = this.body;
+    for (const P of physics.portals) {
+      if (!P.linked || P.axis === 1) continue;
+      if (body.vel.getComponent(P.axis) * P.sign > -0.1) continue; // not moving into it
+      const gap = P.sign > 0 ? body.min(P.axis) - P.plane : P.plane - body.max(P.axis);
+      if (gap < -0.01 || gap > 0.15) continue;
+      const t = P.t1 === 1 ? P.t2 : P.t1; // the portal's horizontal axis
+      if (body.min(t) < P.rmin[t] - 0.02 || body.max(t) > P.rmax[t] + 0.02) continue;
+      const lift = P.rmin[1] + 0.005 - body.min(1);
+      if (lift <= 0 || lift > 0.45 || body.max(1) + lift > P.rmax[1]) continue;
+      body.pos.y += lift;
+      return;
+    }
   }
 
   accelerate(wish, wishSpeed, accel, dt) {

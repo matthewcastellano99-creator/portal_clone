@@ -101,7 +101,7 @@ npm test
 
 **Physics.** The world and everything in it are axis-aligned boxes. When a body is lined up with a linked portal and touching its surface, the level's collision is clipped to the half-space in front of the portal. Walls around the hole are added behind it, which lets you walk into the wall only through the portal opening. When the body's reference point (the eye for the player, the centre for the cube) crosses the portal plane, position, velocity and view direction are mapped to the other portal.
 
-**Placement.** A shot that lands on a white surface is nudged up to 1.3 m to find a spot where the whole portal fits on portalable panels, with nothing in front and no overlap with the other portal. Wall portals shot just above a floor slide down to rest on it.
+**Placement.** A shot that lands on a white surface is nudged up to 1.3 m to find a spot where the whole portal fits on portalable panels, with nothing in front and no overlap with the other portal. Wall portals slide down the wall (up to 3 m) to rest on the floor below them, and walking into a wall portal whose bottom edge is up to 45 cm above your feet steps you up into it.
 
 ## Credits
 

@@ -313,11 +313,12 @@ export class PortalSystem {
       center.copy(hit.point).addScaledVector(right, ox).addScaledVector(up, oy);
       center.setComponent(axis, plane);
       if (this.fits(center, axis, sign, plane, right, up, P.partner, placeBlockers)) {
-        // A wall portal shot just above the floor drops down to sit on it,
-        // so it can be walked into.
+        // A wall portal slides down the wall until it rests on whatever is
+        // below it (up to 3 m), so it can be walked into instead of hanging
+        // just out of reach.
         if (axis !== 1) {
           const lower = center.clone();
-          for (let i = 0; i < 60; i++) {
+          for (let i = 0; i < 150; i++) {
             lower.y -= 0.02;
             if (!this.fits(lower, axis, sign, plane, right, up, P.partner, placeBlockers)) break;
             center.copy(lower);
