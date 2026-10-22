@@ -432,6 +432,104 @@ body.touch #hint {
   font-size: 13px;
 }
 
+/* ------------------------------------------------- elevator transitions */
+
+#fade {
+  position: fixed;
+  inset: 0;
+  z-index: 8;
+  display: grid;
+  place-items: center;
+  background: #000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 1s ease;
+}
+
+#fade.on {
+  opacity: 1;
+}
+
+/* the same chamber sign as on the walls, between chambers */
+.card {
+  width: min(260px, 70vw);
+  padding: 22px 22px 20px;
+  background: #eceae4;
+  color: #2b2b2b;
+  border-radius: 2px;
+  opacity: 0;
+  animation: card-in 0.6s ease 0.5s forwards;
+}
+
+@keyframes card-in {
+  to {
+    opacity: 1;
+  }
+}
+
+.card-number {
+  font-size: 108px;
+  font-weight: 700;
+  line-height: 0.9;
+  letter-spacing: -0.02em;
+}
+
+.card-count {
+  margin-top: 10px;
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.card-bar {
+  display: flex;
+  gap: 5px;
+  margin-top: 10px;
+}
+
+.card-bar i {
+  flex: 1;
+  height: 7px;
+  background: #c9c7c0;
+}
+
+.card-bar i.on {
+  background: #2b2b2b;
+}
+
+.card-rule {
+  height: 2px;
+  margin: 14px 0 8px;
+  background: #2b2b2b;
+}
+
+.card-label {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.card-lines {
+  margin-top: 16px;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.card-lines p {
+  margin: 0 0 4px;
+}
+
+@media (max-height: 420px) {
+  .card {
+    padding: 14px 16px;
+  }
+
+  .card-number {
+    font-size: 64px;
+  }
+}
+
 /* short screens: a phone held sideways */
 @media (max-height: 520px) {
   .panel {

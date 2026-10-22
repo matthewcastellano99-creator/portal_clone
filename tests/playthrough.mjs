@@ -1,5 +1,6 @@
-// Headless end-to-end check: solves Test Chamber 01 through the game's own
-// simulation and fails if any step doesn't happen or the page logs an error.
+// Headless end-to-end check: plays both test chambers (and the elevator ride
+// between them) through the game's own simulation, then stress-tests portal
+// transits. Fails if any step doesn't happen or the page logs an error.
 //
 //   npm install && npm test
 import http from 'node:http';
@@ -85,6 +86,47 @@ const result = await page.evaluate(() => {
   walk(1.0, { forward: 1 });
   lookAt(-15, g.player.eye.y, -8.5);
   walk(2.0, { forward: 1 });
+  steps.elevatorDeparted = !!g.transition && g.levelIndex === 0;
+
+  // The ride: up and out of Chamber 01, down into Chamber 02.
+  walk(10);
+  const arrival = g.level.arrival?.pos ?? [];
+  steps.arrivedInChamber02 = g.levelIndex === 1 && !g.transition &&
+    Math.hypot(g.player.body.pos.x - arrival[0], g.player.body.pos.z - arrival[2]) < 0.3;
+
+  // Chamber 02: drop the cube out of its pit through a portal under it, then
+  // drop it into a floor portal so it falls out of the alcove ceiling onto
+  // the button.
+  const walkTo = (x, z) => {
+    for (let i = 0; i < 960; i++) {
+      const p = g.player.body.pos, dx = x - p.x, dz = z - p.z;
+      if (Math.hypot(dx, dz) < 0.15) break;
+      g.player.yaw = Math.atan2(-dx, -dz);
+      walk(1 / 120, { forward: Math.min(1, Math.hypot(dx, dz)) });
+    }
+    walk(0.3);
+  };
+  const cube = g.cube.body.pos;
+  walkTo(5.5, 5.35); // rim of the pit
+  lookAt(cube.x, cube.y, cube.z); g.shoot(0); // under the cube
+  lookAt(-1, 0, -2); g.shoot(1); // white floor patch
+  walk(2.5);
+  steps.cubeOutOfPit = cube.y > -0.1 && cube.y < 1;
+  walkTo(2.5, 6.5); walkTo(1.5, 1); // around the pit
+  walkTo(cube.x + 1.3, cube.z + 1.3);
+  lookAt(cube.x, cube.y, cube.z); g.use();
+  walk(0.8);
+  walkTo(1.0, 0.8); walkTo(-5.5, 0.8); walkTo(-5.5, -1.5); // around the floor portal
+  lookAt(-5.5, 5.4, -14.3); g.shoot(0); // alcove ceiling, above the button
+  const hole = orange.pos;
+  walkTo(-3.5, 1.5); walkTo(hole.x, hole.z + 1.3);
+  lookAt(hole.x, 0.9, hole.z);
+  walk(1.0);
+  g.use(); // let go over the floor portal
+  walk(2.5);
+  steps.cubeOnAlcoveButton = g.button.pressed && g.button.isOn(g.cube.body) && g.door.open === 1;
+  walkTo(-4, 1.5); walkTo(-8.5, 1.5); walkTo(-9, -5); walkTo(-14.6, -5);
+  walk(5);
   steps.completed = g.state.completed;
   return steps;
 });
@@ -93,20 +135,27 @@ const result = await page.evaluate(() => {
 // the player or the cube through one of them at random speeds and offsets.
 // After every physics step, nothing may be stuck inside solid geometry and
 // the player's eye may not sit behind a wall or a portal.
-const fuzz = await page.evaluate(() => {
+const runFuzz = (level) => page.evaluate((level) => {
   const g = window.__game;
+  g.newGame();
+  if (level) g.loadLevel(level);
   g.pause();
   let seed = 7;
   const rnd = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296;
   const R = (a, b) => a + (b - a) * rnd();
   const v = (x, y, z) => g.player.body.pos.clone().set(x, y, z);
-  // [ray origin, ray target] onto each portalable surface of the level
-  const surfaces = [
+  // [ray origin, ray target] onto each portalable surface of each chamber
+  const surfaces = [[
     () => { const y = R(0.2, 3.8), z = R(-1.8, 5.8); return [v(-6, y, z), v(-9, y, z)]; },
     () => { const y = R(4.2, 7.8), z = R(1.2, 6.8); return [v(7, y, z), v(9, y, z)]; },
     () => { const y = R(4.2, 7.3), x = R(-6.8, -3.2); return [v(x, y, -8), v(x, y, -11)]; },
     () => { const x = R(-1.8, 1.8), z = R(2.2, 5.8); return [v(x, 3, z), v(x, 0, z)]; },
-  ];
+  ], [
+    () => { const x = R(4.2, 6.8), z = R(2.2, 4.8); return [v(x, 3, z), v(x, -3, z)]; }, // pit floor
+    () => { const x = R(-2.8, 0.8), z = R(-3.8, -0.2); return [v(x, 3, z), v(x, 0, z)]; }, // floor patch
+    () => { const x = R(-6.6, -4.4), z = R(-15.4, -13.2); return [v(x, 3, z), v(x, 5.4, z)]; }, // alcove ceiling
+    () => { const y = R(3.2, 7.8), z = R(-1.8, 5.8); return [v(7, y, z), v(10, y, z)]; }, // high east wall
+  ]][level];
   const inside = (p, b) => p.x > b.min[0] + 0.02 && p.x < b.max[0] - 0.02 && p.y > b.min[1] + 0.02 && p.y < b.max[1] - 0.02 && p.z > b.min[2] + 0.02 && p.z < b.max[2] - 0.02;
   const behind = (p, Q) => Q.linked && Q.distance(p) < -0.03 &&
     p.getComponent(Q.t1) > Q.rmin[Q.t1] && p.getComponent(Q.t1) < Q.rmax[Q.t1] &&
@@ -142,14 +191,16 @@ const fuzz = await page.evaluate(() => {
     if (entry.axis !== 1) body.vel.y += 10 * (start.distanceTo(entry.pos) / speed); // offset gravity on the way
     body.portalMode = null;
     g.physics.depenetrate(body, useCube ? body.box : undefined);
-    if (useCube) g.player.body.pos.set(0, 0.9001, 8.5); // keep the player out of the way
+    if (useCube) g.player.body.pos.set(0, 0.9001, 9); // keep the player out of the way
     g.player.pitch = R(-1.4, 1);
     for (let i = 0; i < 480; i++) {
       g.step(1 / 120, { forward: 0, strafe: 0, jump: false });
       const point = useCube ? body.pos : g.player.eye;
       let issue = g.physics.statics.find((s) => inside(point, s)) ? 'inside a wall' : null;
       if (!issue && !useCube && [P0, P1].some((Q) => behind(point, Q))) issue = 'eye behind a portal';
-      if (!issue && g.physics.collect(body, [0, 0, 0], useCube ? body.box : undefined).some((c) => g.physics.overlaps(body, c))) issue = 'overlapping geometry';
+      // level geometry only: the player and the cube may overlap briefly while they move apart
+      const solid = g.physics.collect(body, [0, 0, 0], useCube ? body.box : undefined).filter((c) => !(c.body || c.src?.body));
+      if (!issue && solid.some((c) => g.physics.overlaps(body, c))) issue = 'overlapping geometry';
       if (issue) {
         problems.push({ trial: n, what: useCube ? 'cube' : 'player', step: i, issue, pos: body.pos.toArray().map((x) => +x.toFixed(2)), portals: [P0, P1].map((P) => P.pos.toArray().map((x) => +x.toFixed(2))) });
         break;
@@ -158,10 +209,15 @@ const fuzz = await page.evaluate(() => {
   }
   restorePlayer();
   restoreCube();
-  g.restart();
+  g.newGame();
   return { trials, transits, problems };
-});
-result.portalExitsClear = fuzz.problems.length === 0 && fuzz.transits >= 80;
+}, level);
+for (const level of [0, 1]) {
+  const fuzz = await runFuzz(level);
+  result[`portalExitsClear${level + 1}`] = fuzz.problems.length === 0 && fuzz.transits >= 80;
+  if (fuzz.problems.length) console.error('Portal exit problems:', JSON.stringify(fuzz.problems.slice(0, 5), null, 1));
+  console.log(`Portal fuzz, chamber ${level + 1}: ${fuzz.transits} transits in ${fuzz.trials} trials, ${fuzz.problems.length} problems`);
+}
 
 // From the button platform, portals aimed anywhere on the wall behind it must
 // be walkable: they slide down to the floor, and a small lip is stepped over.
@@ -215,8 +271,6 @@ const walkIn = await page.evaluate(() => {
 result.platformPortalsWalkable = walkIn.through === walkIn.tries;
 result.stepsOverSmallLip = walkIn.smallLip && !walkIn.bigLip;
 console.log(`Platform walk-in: ${walkIn.through}/${walkIn.tries} went through`);
-if (fuzz.problems.length) console.error('Portal exit problems:', JSON.stringify(fuzz.problems.slice(0, 5), null, 1));
-console.log(`Portal fuzz: ${fuzz.transits} transits in ${fuzz.trials} trials, ${fuzz.problems.length} problems`);
 
 await browser.close();
 server.close();
@@ -228,4 +282,4 @@ if (failed.length || errors.length) {
   console.error(`FAILED: ${[...failed, ...(errors.length ? ['page errors'] : [])].join(', ')}`);
   process.exit(1);
 }
-console.log('Test Chamber 01 solved.');
+console.log('Both test chambers solved.');

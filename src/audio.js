@@ -157,6 +157,28 @@ export class Sfx {
     this.tone({ type: 'triangle', f0: open ? 70 : 90, f1: open ? 90 : 60, dur: 0.6, gain: 0.08, attack: 0.05 });
   }
 
+  // Motor hum of an elevator ride; the pitch climbs going up, falls going down.
+  elevator(seconds, up) {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const o = this.ctx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(up ? 48 : 70, t);
+    o.frequency.linearRampToValueAtTime(up ? 72 : 46, t + seconds);
+    const lp = this.ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 260;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.09, t + 0.4);
+    g.gain.setValueAtTime(0.09, t + seconds - 0.6);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + seconds);
+    o.connect(lp).connect(g).connect(this.master);
+    o.start(t);
+    o.stop(t + seconds + 0.05);
+    this.noise({ dur: seconds, gain: 0.025, type: 'bandpass', f0: up ? 500 : 900, f1: up ? 900 : 500, q: 0.8, attack: 0.3 });
+  }
+
   land() {
     this.tone({ type: 'sine', f0: 90, f1: 40, dur: 0.12, gain: 0.12 });
   }

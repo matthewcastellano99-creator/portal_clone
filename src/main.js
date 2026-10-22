@@ -11,10 +11,11 @@ import { PhysicsWorld } from './physics.js';
 import { PortalSystem, teleportBody } from './portals.js';
 import { PortalRenderer } from './portalRenderer.js';
 import { createMaterials } from './materials.js';
-import { LEVEL, buildLevel } from './level.js';
+import { buildLevel } from './level.js';
+import { LEVELS } from './levels.js';
 import { Player } from './player.js';
 import { WeightedCube } from './cube.js';
-import { FloorButton, SlidingDoor, Antline } from './entities.js';
+import { FloorButton, SlidingDoor, Antline, Elevator } from './entities.js';
 import { ViewModel } from './gun.js';
 import { Avatar } from './avatar.js';
 import { Effects } from './effects.js';
@@ -67,6 +68,7 @@ class Game {
       chBlue: document.getElementById('ch-blue'),
       chOrange: document.getElementById('ch-orange'),
       debug: params.has('debug') ? document.getElementById('debug') : null,
+      fade: document.getElementById('fade'),
       loading: document.getElementById('loading'),
       rotate: document.getElementById('rotate'),
     };
@@ -79,13 +81,14 @@ class Game {
     this.onResize();
 
     this.state = { started: false, paused: true, completed: false, time: 0, portalsFired: 0 };
+    this.transition = null;
     this.keys = new Set();
     this.accumulator = 0;
     this.timer = new THREE.Timer();
     this.elapsed = 0;
     this.hintTimer = 0;
     this.subtitleTimer = 0;
-    this.restart();
+    this.loadLevel(LEVELS[saved?.level] ? saved.level : 0);
     this.restore(saved);
 
     window.__game = this;
@@ -139,10 +142,11 @@ class Game {
     sun.shadow.bias = -0.0004;
     sun.shadow.normalBias = 0.03;
     scene.add(sun, sun.target);
+    this.sun = sun;
     scene.add(new THREE.HemisphereLight(0xdde6f0, 0x3a3f45, 0.9));
-    const corridor = new THREE.PointLight(0xdfefff, 8, 9, 2);
-    corridor.position.set(-13.5, 6.5, -8.5);
-    scene.add(corridor);
+    // Lights the exit corridor; each level places it.
+    this.fillLight = new THREE.PointLight(0xdfefff, 8, 9, 2);
+    scene.add(this.fillLight);
 
     this.composerTarget = new THREE.WebGLRenderTarget(1, 1, { type: this.targetType, samples: QUALITY.composerSamples });
     this.composer = new EffectComposer(renderer, this.composerTarget);
@@ -160,17 +164,12 @@ class Game {
     const scene = this.scene;
     this.physics = new PhysicsWorld();
     this.materials = createMaterials(this.renderer, QUALITY.texture);
-    buildLevel(scene, this.physics, this.materials);
 
     this.resolution = new THREE.Vector2(1, 1);
     this.portals = new PortalSystem(scene, this.physics, this.resolution);
     this.portalRenderer = new PortalRenderer(this.renderer, scene, this.portals.portals, { samples: QUALITY.portalSamples, type: this.targetType });
 
     this.player = new Player();
-    this.cube = new WeightedCube(scene, LEVEL.cube);
-    this.button = new FloorButton(scene, LEVEL.button);
-    this.door = new SlidingDoor(scene, LEVEL.door);
-    this.antline = new Antline(scene, [LEVEL.button[0] - 0.98, LEVEL.button[1], LEVEL.button[2]], [LEVEL.door.x + 0.62, LEVEL.door.y, LEVEL.door.z]);
     this.avatar = new Avatar(scene, [1]);
     this.avatarClone = new Avatar(scene, [0, 1]);
     this.avatarClone.root.matrixAutoUpdate = false;
@@ -191,7 +190,7 @@ class Game {
     window.visualViewport?.addEventListener('resize', () => this.onResize());
     this.ui.play.addEventListener('click', () => this.begin(true));
     this.ui.replay.addEventListener('click', () => {
-      this.restart();
+      this.newGame();
       this.begin(true);
     });
     document.addEventListener('visibilitychange', () => {
@@ -276,7 +275,7 @@ class Game {
       }
       if (e.repeat || this.state.paused) return;
       if (e.code === 'KeyE' || e.code === 'KeyF') this.use();
-      if (e.code === 'KeyR') this.restart();
+      if (e.code === 'KeyR' && !this.transition) this.restart();
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
     window.addEventListener('blur', () => this.keys.clear());
@@ -289,7 +288,7 @@ class Game {
     this.ui.overlay.classList.add('hidden');
     this.ui.complete.classList.add('hidden');
     const touch = document.body.classList.contains('touch');
-    this.touch.enabled = touch;
+    this.touch.enabled = touch && !this.transition;
     if (touch) {
       // Full screen and landscape where the browser allows it (Android).
       const el = document.documentElement;
@@ -303,7 +302,10 @@ class Game {
       this.canvas.requestPointerLock()?.catch?.(() => this.onPointerLockFailed());
     }
     this.keepAwake();
-    if (this.subtitleTimer === 0) this.say('Test Chamber 01. Bring the Weighted Cube to the button to open the exit.', 7);
+    if (!this.introShown) {
+      this.introShown = true;
+      this.say(this.level.intro, 7);
+    }
   }
 
   // A refusal after the lock has worked before is temporary (Chrome refuses
@@ -350,22 +352,74 @@ class Game {
     this.viewModel.addSway(dx, dy);
   }
 
+  // Build a chamber, replacing the current one.
+  loadLevel(index) {
+    if (this.levelRoot) {
+      this.scene.remove(this.levelRoot);
+      disposeTree(this.levelRoot, new Set(Object.values(this.materials)));
+    }
+    const def = LEVELS[index];
+    this.levelIndex = index;
+    this.level = def;
+    this.physics.statics = [];
+    this.levelRoot = new THREE.Group();
+    this.scene.add(this.levelRoot);
+    buildLevel(this.levelRoot, this.physics, this.materials, def);
+    this.cube = new WeightedCube(this.levelRoot, def.cube);
+    this.button = new FloorButton(this.levelRoot, def.button);
+    this.door = new SlidingDoor(this.levelRoot, def.door);
+    this.antline = new Antline(this.levelRoot, def.antline);
+    this.exitLift = new Elevator(this.levelRoot, def.exit);
+    this.arrivalLift = def.arrival ? new Elevator(this.levelRoot, def.arrival) : null;
+    this.fillLight.position.fromArray(def.fillLight);
+    const { x, z, half } = def.shadow;
+    this.sun.position.set(x + 6, 30, z + 5);
+    this.sun.target.position.set(x, 0, z);
+    const sc = this.sun.shadow.camera;
+    sc.left = sc.bottom = -half;
+    sc.right = sc.top = half;
+    sc.updateProjectionMatrix();
+    this.restart();
+  }
+
+  // Put the current chamber back the way it started.
   restart() {
     this.dirty = true;
     this.portals.reset();
     this.cube.reset();
+    this.cube.lastExit = null;
     this.sfx.setHolding(false);
-    this.player.spawn(LEVEL.spawn.pos, LEVEL.spawn.yaw);
+    this.spawnPlayer();
     this.door.open = 0;
     this.door.target = 0;
     this.door.layout();
     this.button.pressed = false;
     this.antline.set(false);
+    this.doorAnnounced = false;
+    this.exitLift.setDoor(0);
+    this.exitLift.setLift(0);
+    this.arrivalLift?.setDoor(0);
+    this.arrivalLift?.setLift(0);
+    this.ui.complete.classList.add('hidden');
+    this.updateCrosshair();
+  }
+
+  // The first chamber starts on the floor; later ones in the arrival elevator.
+  spawnPlayer() {
+    const { arrival, spawn } = this.level;
+    if (arrival) this.player.spawn(arrival.pos, arrival.yaw + Math.PI);
+    else this.player.spawn(spawn.pos, spawn.yaw);
+  }
+
+  // Back to the first chamber with fresh totals.
+  newGame() {
+    this.transition = null;
+    this.fade(false);
     this.state.completed = false;
     this.state.time = 0;
     this.state.portalsFired = 0;
-    this.ui.complete.classList.add('hidden');
-    this.updateCrosshair();
+    this.introShown = false;
+    this.loadLevel(0);
   }
 
   onResize() {
@@ -403,13 +457,13 @@ class Game {
   // ---------------------------------------------------------------- actions
 
   shoot(id) {
-    if (this.state.completed) return;
+    if (this.state.completed || this.transition) return;
     const eye = this.player.eye;
     const dir = this.player.forward();
     const P = this.portals.portals[id];
     const before = this.captureTunnelState(P);
-    const cubeBox = this.cube.held ? null : this.cube.body.syncBox();
-    const res = this.portals.tryPlace(id, eye, dir, dir, [...this.door.boxes, cubeBox], this.door.boxes);
+    // Shots pass through the cube, so aiming at it puts a portal under it.
+    const res = this.portals.tryPlace(id, eye, dir, dir, this.door.boxes, this.door.boxes);
     this.state.portalsFired++;
     this.viewModel.fire(id);
     this.sfx.shoot(id);
@@ -453,7 +507,7 @@ class Game {
   }
 
   use() {
-    if (this.state.completed) return;
+    if (this.state.completed || this.transition) return;
     if (this.cube.held) {
       this.dropCube();
       return;
@@ -463,6 +517,7 @@ class Game {
       this.cube.held = true;
       this.cube.via = hit.via;
       this.cube.strain = 0;
+      this.cube.lastExit = null;
       this.sfx.pickup();
     } else {
       this.sfx.denied();
@@ -604,9 +659,14 @@ class Game {
     const player = this.player;
     const cube = this.cube;
 
-    this.funnel(player.body, h);
-    player.update(h, input, this.physics, (P) => this.onPlayerTeleport(P));
-    if (player.landed) this.sfx.land();
+    if (this.transition) {
+      this.updateTransition(h);
+      if (!this.transition || this.state.completed) return;
+    } else {
+      this.funnel(player.body, h);
+      player.update(h, input, this.physics, (P) => this.onPlayerTeleport(P));
+      if (player.landed) this.sfx.land();
+    }
 
     const cubeCross = (P) => this.onCubeTeleport(P);
     if (cube.held) {
@@ -621,6 +681,7 @@ class Game {
       }
     } else {
       this.funnel(cube.body, h);
+      this.slideIntoPortal(cube, h);
       cube.updateFree(h, this.physics, cubeCross);
       if (Math.abs(cube.body.min(1) - this.button.pos.y) < 0.2) cube.settleOnto(h, this.button.pos);
     }
@@ -634,24 +695,140 @@ class Game {
       this.sfx.door(down);
       this.door.target = down ? 1 : 0;
       this.antline.set(down);
+      if (down && !this.doorAnnounced && !cube.held && this.button.isOn(cube.body)) {
+        this.doorAnnounced = true;
+        this.say(this.level.doorOpen, 6);
+      }
     }
     cube.setActivated(!cube.held && this.button.isOn(cube.body));
     this.door.update(h);
 
-    if (player.body.pos.y < LEVEL.killY) {
-      player.spawn(LEVEL.spawn.pos, LEVEL.spawn.yaw);
+    if (player.body.pos.y < this.level.killY) {
+      this.spawnPlayer();
       this.dropCube();
     }
-    if (cube.body.pos.y < LEVEL.killY) {
+    if (cube.body.pos.y < this.level.killY) {
       this.dropCube();
       cube.reset();
     }
 
-    const p = player.body.pos;
-    const ex = LEVEL.exit;
-    if (!this.state.completed && p.x > ex.min[0] && p.x < ex.max[0] && p.y > ex.min[1] && p.y < ex.max[1] && p.z > ex.min[2] && p.z < ex.max[2]) {
-      this.complete();
+    if (!this.transition && !this.state.completed && this.exitLift.holds(player.body)) this.startDeparture();
+  }
+
+  // A cube left lying across the edge of a floor portal slides into the
+  // hole, but never back into the portal it just came out of.
+  slideIntoPortal(cube, h) {
+    const body = cube.body;
+    if (!body.onGround) return;
+    for (const P of this.portals.portals) {
+      if (!P.linked || P.axis !== 1 || P.sign < 0 || P === cube.lastExit) continue;
+      if (Math.abs(body.min(1) - P.plane) > 0.05) continue;
+      if (![P.t1, P.t2].every((t) => body.max(t) > P.rmin[t] && body.min(t) < P.rmax[t])) continue;
+      body.vel.x += (P.pos.x - body.pos.x) * 30 * h;
+      body.vel.z += (P.pos.z - body.pos.z) * 30 * h;
     }
+  }
+
+  // ------------------------------------------------------------ elevators
+  //
+  // Stepping into the exit elevator closes its door and rides it up the
+  // shaft while the screen fades out. The next chamber is built behind the
+  // black card, then the player rides its arrival elevator down into the
+  // room, the door opens and control comes back. Runs in the fixed step so
+  // tests can drive it.
+
+  startDeparture() {
+    this.dropCube();
+    this.transition = { phase: 'depart', t: 0 };
+    this.touch.enabled = false;
+    this.say('', 0);
+    this.sfx.door(false);
+  }
+
+  updateTransition(h) {
+    const tr = this.transition;
+    tr.t += h;
+    const body = this.player.body;
+    const smooth = (x) => { x = THREE.MathUtils.clamp(x, 0, 1); return x * x * (3 - 2 * x); };
+    const ride = (lift, height) => {
+      // the player stands in the middle of the car and moves with it
+      const k = 1 - Math.exp(-h * 8);
+      body.pos.x += (lift.base.x - body.pos.x) * k;
+      body.pos.z += (lift.base.z - body.pos.z) * k;
+      body.pos.y = lift.base.y + height + body.half[1] + 0.002;
+      body.vel.set(0, 0, 0);
+      body.portalMode = null;
+    };
+
+    if (tr.phase === 'depart') {
+      const lift = this.exitLift;
+      lift.setDoor(smooth(tr.t / 0.8));
+      const p = THREE.MathUtils.clamp((tr.t - 0.9) / 3, 0, 1);
+      const height = 4.5 * p * p;
+      lift.setLift(height);
+      ride(lift, height);
+      if (tr.t > 1 && !tr.hum) {
+        tr.hum = true;
+        this.sfx.elevator(3.5, true);
+      }
+      if (tr.t > 1.9 && !tr.faded) {
+        tr.faded = true;
+        this.fade(true, LEVELS[this.levelIndex + 1]);
+      }
+      if (tr.t > 3.2) {
+        if (this.levelIndex + 1 >= LEVELS.length) {
+          this.transition = null;
+          this.complete();
+          return;
+        }
+        // Swap chambers while the screen is black.
+        this.loadLevel(this.levelIndex + 1);
+        this.transition = { phase: 'arrive', t: 0 };
+        this.arrivalLift.setDoor(1);
+        this.arrivalLift.setLift(4.5);
+        ride(this.arrivalLift, 4.5);
+      }
+      return;
+    }
+
+    // arrive
+    const lift = this.arrivalLift;
+    if (tr.t > 1.4 && !tr.shown) {
+      tr.shown = true;
+      this.fade(false);
+      this.sfx.elevator(2.8, false);
+    }
+    const p = THREE.MathUtils.clamp((tr.t - 1.4) / 2.8, 0, 1);
+    const height = 4.5 * (1 - p) * (1 - p);
+    lift.setLift(height);
+    ride(lift, height);
+    if (p >= 1 && tr.openAt === undefined) {
+      tr.openAt = tr.t;
+      this.sfx.door(true);
+    }
+    if (tr.openAt !== undefined) {
+      lift.setDoor(1 - smooth((tr.t - tr.openAt) / 0.8));
+      if (tr.t - tr.openAt > 0.8) {
+        this.transition = null;
+        const playing = this.state.started && !this.state.paused;
+        this.touch.enabled = playing && document.body.classList.contains('touch');
+        this.say(this.level.intro, 7);
+      }
+    }
+  }
+
+  // Black screen with the next chamber's card (or plain black) over the game.
+  fade(on, next) {
+    const el = this.ui.fade;
+    if (on && next) {
+      const pad = (n) => String(n).padStart(2, '0');
+      el.querySelector('.card-number').textContent = pad(next.number);
+      el.querySelector('.card-count').textContent = `${pad(next.number)}/${pad(LEVELS.length)}`;
+      el.querySelector('.card-bar').innerHTML = LEVELS.map((_, i) => `<i class="${i < next.number ? 'on' : ''}"></i>`).join('');
+      el.querySelector('.card-lines').innerHTML = next.card.map((l) => `<p>${l}</p>`).join('');
+    }
+    el.querySelector('.card').hidden = !next;
+    el.classList.toggle('on', on);
   }
 
   holdTarget() {
@@ -691,6 +868,7 @@ class Game {
     teleportBody(cube.body, P);
     this.physics.depenetrate(cube.body, cube.body.box);
     cube.applyPortalRotation(P.rotToPartner);
+    cube.lastExit = P.partner;
     if (!cube.held) return;
     if (cube.via === null) cube.via = P;
     else if (cube.via === P.partner) cube.via = null;
@@ -719,7 +897,7 @@ class Game {
     this.sfx.complete();
     const t = this.state.time;
     const mm = Math.floor(t / 60), ss = Math.floor(t % 60).toString().padStart(2, '0');
-    this.ui.stats.textContent = `Time ${mm}:${ss}  ·  Portals fired ${this.state.portalsFired}`;
+    this.ui.stats.textContent = `${LEVELS.length} chambers  ·  Time ${mm}:${ss}  ·  Portals fired ${this.state.portalsFired}`;
     this.ui.complete.classList.remove('hidden');
     document.exitPointerLock?.();
   }
@@ -808,8 +986,8 @@ class Game {
 
   say(text, seconds) {
     this.ui.subtitle.textContent = text;
-    this.ui.subtitle.classList.add('show');
-    this.subtitleTimer = seconds;
+    this.ui.subtitle.classList.toggle('show', !!text);
+    this.subtitleTimer = text ? seconds : 0;
   }
 
   // ---------------------------------------------------------------- saving
@@ -818,6 +996,7 @@ class Game {
   serialize() {
     const p = this.player, c = this.cube;
     return {
+      level: this.levelIndex,
       player: { pos: p.body.pos.toArray(), vel: p.body.vel.toArray(), yaw: p.yaw, pitch: p.pitch, portalMode: this.portals.portals.indexOf(p.body.portalMode) },
       cube: { pos: c.body.pos.toArray(), portalMode: this.portals.portals.indexOf(c.body.portalMode) },
       portals: this.portals.portals.map((P) => (P.placed
@@ -853,7 +1032,7 @@ class Game {
       this.updateCrosshair();
       if (saved.state.started) {
         this.state.started = true;
-        this.subtitleTimer = -1;
+        this.introShown = true;
         this.pause();
       }
     } catch (err) {
@@ -861,6 +1040,21 @@ class Game {
       this.restart();
     }
   }
+}
+
+// Free the GPU resources of a level that is being replaced, keeping the
+// shared surface materials.
+function disposeTree(root, keep) {
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    o.geometry.dispose();
+    for (const m of [].concat(o.material)) {
+      if (keep.has(m)) continue;
+      m.map?.dispose();
+      m.emissiveMap?.dispose();
+      m.dispose();
+    }
+  });
 }
 
 function rayBox(origin, dir, box) {

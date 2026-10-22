@@ -422,11 +422,21 @@ function settleExit(body, Q, ahead) {
       const vmin = Math.sqrt(2 * PHYSICS.gravity * (depth + 0.3));
       if (body.vel.y < vmin) {
         body.vel.y = vmin;
-        // A slow exit would just fall back in, so drift clear of the hole.
-        const h = Math.hypot(body.vel.x, body.vel.z);
-        if (h < 2.8) {
-          body.vel.x += ahead.x * (2.8 - h);
-          body.vel.z += ahead.z * (2.8 - h);
+        // A slow exit would just fall back in, so drift far enough along
+        // `ahead` to land clear of the hole: rise to 0.3 m above the floor,
+        // then fall back to it.
+        const g = PHYSICS.gravity;
+        const airTime = vmin / g + Math.sqrt(0.6 / g);
+        const len = Math.hypot(ahead.x, ahead.z) || 1;
+        const ax = ahead.x / len, az = ahead.z / len;
+        const reach = Math.abs(ax) * ((Q.rmax[0] - Q.rmin[0]) / 2 + body.half[0]) +
+          Math.abs(az) * ((Q.rmax[2] - Q.rmin[2]) / 2 + body.half[2]) + 0.25;
+        const done = (body.pos.x - Q.pos.x) * ax + (body.pos.z - Q.pos.z) * az;
+        const need = (reach - done) / airTime;
+        const have = body.vel.x * ax + body.vel.z * az;
+        if (have < need) {
+          body.vel.x += ax * (need - have);
+          body.vel.z += az * (need - have);
         }
       }
     }

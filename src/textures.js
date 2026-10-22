@@ -272,7 +272,8 @@ export function cubeFaceTextures() {
 }
 
 // The info panel next to the start position.
-export function chamberSignTexture() {
+// `lit` says which of the six pictograms apply to this chamber.
+export function chamberSignTexture({ number, total, lit, lines }) {
   const w = 512, h = 1024;
   const c = document.createElement('canvas');
   c.width = w;
@@ -283,13 +284,15 @@ export function chamberSignTexture() {
   ctx.fillStyle = '#2b2b2b';
   ctx.font = 'bold 300px "Helvetica Neue", Arial, sans-serif';
   ctx.textBaseline = 'top';
-  ctx.fillText('01', 30, 40);
+  const pad = (n) => String(n).padStart(2, '0');
+  ctx.fillText(pad(number), 30, 40);
   ctx.font = 'bold 48px "Helvetica Neue", Arial, sans-serif';
-  ctx.fillText('01/19', 36, 350);
+  ctx.fillText(`${pad(number)}/${pad(total)}`, 36, 350);
   // progress bar
-  for (let i = 0; i < 19; i++) {
-    ctx.fillStyle = i < 1 ? '#2b2b2b' : '#c9c7c0';
-    ctx.fillRect(36 + i * 23, 420, 18, 14);
+  const seg = Math.min(60, (w - 72) / total);
+  for (let i = 0; i < total; i++) {
+    ctx.fillStyle = i < number ? '#2b2b2b' : '#c9c7c0';
+    ctx.fillRect(36 + i * seg, 420, seg - 6, 14);
   }
   ctx.fillStyle = '#2b2b2b';
   ctx.fillRect(30, 460, w - 60, 4);
@@ -310,11 +313,11 @@ export function chamberSignTexture() {
     ctx.moveTo(x + 60, y + 72);
     ctx.lineTo(x + 60, y + 100);
     ctx.stroke();
-  }, true);
+  }, lit[0]);
   icon(196, 560, (x, y) => {
     ctx.fillRect(x + 38, y + 30, 44, 44);
     ctx.fillRect(x + 20, y + 84, 80, 12);
-  }, true);
+  }, lit[1]);
   icon(356, 560, (x, y) => {
     ctx.beginPath();
     ctx.ellipse(x + 40, y + 60, 16, 38, 0, 0, Math.PI * 2);
@@ -322,26 +325,25 @@ export function chamberSignTexture() {
     ctx.beginPath();
     ctx.ellipse(x + 84, y + 60, 16, 38, 0, 0, Math.PI * 2);
     ctx.stroke();
-  }, true);
+  }, lit[2]);
   icon(36, 720, (x, y) => {
     ctx.beginPath();
     ctx.arc(x + 60, y + 50, 22, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillRect(x + 50, y + 70, 20, 34);
-  }, false);
+  }, lit[3]);
   icon(196, 720, (x, y) => {
     for (let i = 0; i < 4; i++) ctx.fillRect(x + 22 + i * 22, y + 30, 8, 60);
-  }, false);
+  }, lit[4]);
   icon(356, 720, (x, y) => {
     ctx.beginPath();
     ctx.moveTo(x + 20, y + 90);
     ctx.quadraticCurveTo(x + 60, y + 10, x + 100, y + 90);
     ctx.stroke();
-  }, false);
+  }, lit[5]);
   ctx.fillStyle = '#2b2b2b';
   ctx.font = '500 22px "Helvetica Neue", Arial, sans-serif';
-  ctx.fillText('Bring the cube to the button.', 36, 880);
-  ctx.fillText('Some surfaces will not hold a portal.', 36, 912);
+  lines.forEach((line, i) => ctx.fillText(line, 36, 880 + i * 32));
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 8;

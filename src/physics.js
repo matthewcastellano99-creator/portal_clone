@@ -216,18 +216,24 @@ export class PhysicsWorld {
 
   // Push a body out of anything it is stuck in (used after teleports and when
   // a portal it was passing through disappears).
+  // Only level geometry is pushed against: two moving bodies that overlap
+  // (say the player coming out of a portal the cube is falling into) drift
+  // apart on their own, since moves never resolve overlaps they didn't make.
   depenetrate(body, ignore) {
     const zero = [0, 0, 0];
     for (let iter = 0; iter < 4; iter++) {
       let moved = false;
       for (const c of this.collect(body, zero, ignore)) {
-        if (!this.overlaps(body, c)) continue;
+        if (c.body || c.src?.body || !this.overlaps(body, c)) continue;
+        // Never push a body deeper into the portal hole it is passing through.
+        const P = body.portalMode;
         let bestA = 1, bestD = Infinity, bestS = 1;
         for (let a = 0; a < 3; a++) {
           const pushUp = c.max[a] - body.min(a);
           const pushDown = body.max(a) - c.min[a];
-          if (pushUp < bestD) { bestD = pushUp; bestA = a; bestS = 1; }
-          if (pushDown < bestD) { bestD = pushDown; bestA = a; bestS = -1; }
+          const intoHole = (s) => P && a === P.axis && s === -P.sign;
+          if (pushUp < bestD && !intoHole(1)) { bestD = pushUp; bestA = a; bestS = 1; }
+          if (pushDown < bestD && !intoHole(-1)) { bestD = pushDown; bestA = a; bestS = -1; }
         }
         body.pos.setComponent(bestA, body.pos.getComponent(bestA) + bestS * (bestD + EPS));
         if (Math.sign(body.vel.getComponent(bestA)) === -bestS) body.vel.setComponent(bestA, 0);
