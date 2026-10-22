@@ -4,9 +4,24 @@ A small first-person puzzle game for the browser, inspired by Valve's *Portal*. 
 
 This is a proof of concept with one level, **Test Chamber 01**.
 
-**Play:** https://matthewcastellano99-creator.github.io/portal_clone/ (desktop browser with a mouse; WebGL 2 required)
+**Play:** https://matthewcastellano99-creator.github.io/portal_clone/
+
+It runs in a desktop browser with a mouse and keyboard, or on a phone or tablet with on-screen controls. Phones work best held sideways. It needs WebGL 2 (iOS 16.4 or later, or a recent Chrome, Firefox or Edge).
 
 ## Controls
+
+On a phone or tablet:
+
+| Touch | Action |
+| --- | --- |
+| Left half of the screen | Move (the stick appears under your thumb) |
+| Drag anywhere else | Look |
+| Blue / orange buttons | Fire a portal (keep dragging to aim) |
+| Grab | Pick up / drop the cube (it lights up when the cube is in reach) |
+| Jump | Jump |
+| Pause button (top left) | Pause |
+
+With a mouse and keyboard:
 
 | Input | Action |
 | --- | --- |
@@ -18,6 +33,8 @@ This is a proof of concept with one level, **Test Chamber 01**.
 | E (or F) | Pick up / drop the cube |
 | R | Restart the chamber |
 | Esc | Pause |
+
+If the browser won't lock the mouse pointer (some embedded views), drag to look and click without dragging to fire.
 
 Portals only stick to the **white panels**. Dark metal, the door and the cube stop a shot.
 
@@ -43,7 +60,16 @@ Then open `http://localhost:8080` (or whichever port the server prints).
 URL options:
 
 - `?quality=low`: lower resolution, no multisampling and 2 levels of portal recursion, for weaker GPUs.
+- `?quality=mobile` / `?quality=high`: force the phone or desktop settings. Phones and tablets pick `mobile` automatically, and the render resolution also adjusts itself while you play to keep the frame rate up.
 - `?debug`: show an FPS and portal-render counter.
+
+## Publishing
+
+GitHub Pages serves the `gh-pages` branch. To update the live game after changing `main`:
+
+```sh
+git push origin main:gh-pages
+```
 
 ## Tests
 
@@ -59,7 +85,8 @@ npm test
 
 | File | Purpose |
 | --- | --- |
-| `src/main.js` | Game setup, fixed-step loop, input, cube carrying, UI |
+| `src/main.js` | Game setup, quality presets, fixed-step loop, input, cube carrying, UI |
+| `src/touch.js` | On-screen touch controls |
 | `src/level.js` | Test Chamber 01 layout (axis-aligned boxes) and decoration |
 | `src/physics.js` | Box-vs-box collision, portal-aware collision and raycasts |
 | `src/portals.js` | Portal placement and fitting, portal surface shader, teleporting |

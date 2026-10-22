@@ -113,9 +113,16 @@ class Game {
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x05070a);
     scene.matrixWorldAutoUpdate = false;
-    const pmrem = new THREE.PMREMGenerator(renderer);
-    scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-    scene.environmentIntensity = 0.35;
+    if (this.halfFloat) {
+      const pmrem = new THREE.PMREMGenerator(renderer);
+      scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+      pmrem.dispose();
+      scene.environmentIntensity = 0.35;
+    } else {
+      // PMREMGenerator always renders into half-float targets, which this GPU
+      // can't draw into; light the metal with a plain ambient term instead.
+      scene.add(new THREE.AmbientLight(0xdde6f0, 0.6));
+    }
     this.scene = scene;
 
     this.camera = new THREE.PerspectiveCamera(RENDER.fov, 1, RENDER.near, RENDER.far);
@@ -189,7 +196,7 @@ class Game {
     });
     document.addEventListener('visibilitychange', () => {
       if (document.hidden && this.state.started && !this.state.paused && !this.state.completed) this.pause();
-      if (!document.hidden && !this.state.paused) this.keepAwake();
+      if (!document.hidden && this.state.started && !this.state.paused && !this.state.completed) this.keepAwake();
     });
 
     this.touch = new TouchControls(document.getElementById('touch'), {
@@ -198,25 +205,34 @@ class Game {
       onUse: () => this.use(),
       onPause: () => this.pause(),
     });
-    // A touch anywhere switches to the on-screen controls (e.g. on a laptop
-    // with a touch screen), the mouse switches back.
+    // A finger anywhere switches to the on-screen controls (e.g. on a laptop
+    // with a touch screen) and the mouse switches back. A pen works with
+    // whichever controls are showing, so it doesn't switch.
     window.addEventListener('pointerdown', (e) => {
+      if (e.pointerType !== 'touch' && e.pointerType !== 'mouse') return;
       const touch = e.pointerType === 'touch';
-      if (touch !== document.body.classList.contains('touch')) {
-        document.body.classList.toggle('touch', touch);
-        this.touch.enabled = touch && !this.state.paused;
+      if (touch === document.body.classList.contains('touch')) return;
+      const playing = this.state.started && !this.state.paused && !this.state.completed;
+      document.body.classList.toggle('touch', touch);
+      this.touch.enabled = touch && playing;
+      if (touch) {
+        // The finger landed on the game view before the controls appeared.
+        if (this.touch.enabled && e.target === this.canvas) this.touch.down(e);
+      } else if (playing) {
+        // The hidden controls swallow this click, so take over the mouse here.
+        this.begin(true);
       }
     }, true);
 
     // Mouse: pointer lock when the browser allows it. Where it doesn't (some
     // embedded views), drag to look and click without dragging to fire.
     this.pointerLockFailed = !('requestPointerLock' in this.canvas);
+    this.hadLock = false;
     this.drag = null;
-    document.addEventListener('pointerlockerror', () => {
-      this.pointerLockFailed = true;
-    });
+    document.addEventListener('pointerlockerror', () => this.onPointerLockFailed());
     document.addEventListener('pointerlockchange', () => {
       const locked = document.pointerLockElement === this.canvas;
+      if (locked) this.hadLock = true;
       if (!locked && this.state.started && !this.state.completed && !params.has('autostart')) this.pause();
     });
     this.canvas.addEventListener('mousedown', (e) => {
@@ -253,6 +269,11 @@ class Game {
     window.addEventListener('keydown', (e) => {
       if (e.code === 'Space') e.preventDefault();
       this.keys.add(e.code);
+      // Without pointer lock the browser doesn't turn Esc into a pause for us.
+      if (e.code === 'Escape' && document.pointerLockElement !== this.canvas && this.state.started && !this.state.paused && !this.state.completed) {
+        this.pause();
+        return;
+      }
       if (e.repeat || this.state.paused) return;
       if (e.code === 'KeyE' || e.code === 'KeyF') this.use();
       if (e.code === 'KeyR') this.restart();
@@ -279,16 +300,24 @@ class Game {
       }
     } else if (lock && !this.pointerLockFailed) {
       // Older browsers return undefined here instead of a promise.
-      this.canvas.requestPointerLock()?.catch?.(() => {
-        this.pointerLockFailed = true;
-      });
+      this.canvas.requestPointerLock()?.catch?.(() => this.onPointerLockFailed());
     }
     this.keepAwake();
     if (this.subtitleTimer === 0) this.say('Test Chamber 01. Bring the Weighted Cube to the button to open the exit.', 7);
   }
 
+  // A refusal after the lock has worked before is temporary (Chrome refuses
+  // for a moment after Esc), so pause and let the next click try again. A
+  // refusal before that means this page can't lock the pointer at all.
+  onPointerLockFailed() {
+    if (!this.hadLock) this.pointerLockFailed = true;
+    else if (this.state.started && !this.state.paused && !this.state.completed) this.pause();
+  }
+
   pause() {
     this.state.paused = true;
+    this.dirty = true;
+    this.releaseWakeLock();
     this.keys.clear();
     this.drag = null;
     this.touch.enabled = false;
@@ -301,9 +330,19 @@ class Game {
   keepAwake() {
     if (!navigator.wakeLock || this.wakeLock) return;
     navigator.wakeLock.request('screen').then((lock) => {
+      if (this.state.paused || this.state.completed) {
+        lock.release().catch(() => {});
+        return;
+      }
       this.wakeLock = lock;
       lock.addEventListener('release', () => (this.wakeLock = null));
     }).catch(() => {});
+  }
+
+  releaseWakeLock() {
+    const lock = this.wakeLock;
+    this.wakeLock = null;
+    lock?.release().catch(() => {});
   }
 
   look(dx, dy) {
@@ -312,6 +351,7 @@ class Game {
   }
 
   restart() {
+    this.dirty = true;
     this.portals.reset();
     this.cube.reset();
     this.sfx.setHolding(false);
@@ -329,6 +369,7 @@ class Game {
   }
 
   onResize() {
+    this.dirty = true;
     const w = window.innerWidth, h = window.innerHeight;
     this.renderer.setPixelRatio(this.pixelRatio ?? this.maxPixelRatio);
     this.renderer.setSize(w, h);
@@ -355,7 +396,7 @@ class Game {
     return {
       forward: THREE.MathUtils.clamp((down('KeyW', 'ArrowUp') ? 1 : 0) - (down('KeyS', 'ArrowDown') ? 1 : 0) + t.move.y, -1, 1),
       strafe: THREE.MathUtils.clamp((down('KeyD', 'ArrowRight') ? 1 : 0) - (down('KeyA', 'ArrowLeft') ? 1 : 0) + t.move.x, -1, 1),
-      jump: down('Space') || t.jump,
+      jump: down('Space') || t.jump || t.jumpLatch,
     };
   }
 
@@ -502,8 +543,14 @@ class Game {
         steps++;
       }
       if (steps === 12) this.accumulator = 0;
+      // A tap on Jump shorter than a frame still counts once.
+      if (steps > 0) this.touch.jumpLatch = false;
     }
     this.frameUpdate(dt);
+    // Behind the title, pause and end screens the picture doesn't need to
+    // change, so stop spending GPU (and battery) on it.
+    if ((this.state.paused || this.state.completed) && !this.dirty) return;
+    this.dirty = false;
     this.render();
   }
 
@@ -516,14 +563,20 @@ class Game {
     if (s.sum < 2) return;
     const avg = s.sum / s.n;
     s.sum = s.n = 0;
+    if (s.floorUntil && this.state.time > s.floorUntil) {
+      s.floor = 0.6;
+      s.floorUntil = 0;
+    }
     const cur = this.pixelRatio ?? this.maxPixelRatio;
     let next = cur;
     if (avg > 1 / 45) {
       if (s.lowered && avg > s.prev * 0.92) {
-        // Lowering didn't help, so the frame rate is capped by something else
-        // (a battery saver, a 30 Hz screen). Go back up and stay there.
+        // Lowering didn't help, so the frame rate is probably capped by
+        // something else (a battery saver, a 30 Hz screen). Go back up and
+        // stay there for a while, then try again (the view may have changed).
         next = Math.min(this.maxPixelRatio, cur / 0.85);
         s.floor = next;
+        s.floorUntil = this.state.time + 30;
         s.lowered = false;
       } else if (cur * 0.85 >= s.floor) {
         next = cur * 0.85;
@@ -660,6 +713,8 @@ class Game {
 
   complete() {
     this.state.completed = true;
+    this.dirty = true;
+    this.releaseWakeLock();
     this.dropCube();
     this.sfx.complete();
     const t = this.state.time;
@@ -763,8 +818,8 @@ class Game {
   serialize() {
     const p = this.player, c = this.cube;
     return {
-      player: { pos: p.body.pos.toArray(), vel: p.body.vel.toArray(), yaw: p.yaw, pitch: p.pitch },
-      cube: { pos: c.body.pos.toArray() },
+      player: { pos: p.body.pos.toArray(), vel: p.body.vel.toArray(), yaw: p.yaw, pitch: p.pitch, portalMode: this.portals.portals.indexOf(p.body.portalMode) },
+      cube: { pos: c.body.pos.toArray(), portalMode: this.portals.portals.indexOf(c.body.portalMode) },
       portals: this.portals.portals.map((P) => (P.placed
         ? { pos: P.pos.toArray(), axis: P.axis, sign: P.sign, plane: P.plane, up: P.up.toArray(), right: P.right.toArray() }
         : null)),
@@ -788,7 +843,12 @@ class Game {
         P.open = 1;
       });
       this.portals.refresh();
+      // Keep anything that was part-way through a portal in its hole.
+      p.body.portalMode = this.portals.portals[saved.player.portalMode] ?? null;
+      this.cube.body.portalMode = this.portals.portals[saved.cube.portalMode] ?? null;
       this.physics.depenetrate(p.body);
+      this.physics.depenetrate(this.cube.body, this.cube.body.box);
+      this.dirty = true;
       Object.assign(this.state, { time: saved.state.time, portalsFired: saved.state.portalsFired });
       this.updateCrosshair();
       if (saved.state.started) {

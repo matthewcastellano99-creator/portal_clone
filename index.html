@@ -81,6 +81,17 @@
 
   <div id="loading" class="screen">Preparing test chamber…</div>
 
+  <script>
+    // Browsers too old for the game's JavaScript (e.g. iOS before 16.4) never
+    // start it; say so instead of leaving the loading text up.
+    setTimeout(function () {
+      var el = document.getElementById('loading');
+      if (!window.__game && el && !el.classList.contains('hidden') && el.textContent.indexOf('WebGL') < 0) {
+        el.textContent = "This browser can't run the game. Try a recent Safari (iOS 16.4 or later), Chrome or Firefox.";
+      }
+    }, 20000);
+  </script>
+
   <script type="module" src="src/main.js"></script>
 </body>
 </html>

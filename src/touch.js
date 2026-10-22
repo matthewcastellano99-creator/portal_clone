@@ -11,6 +11,7 @@ export class TouchControls {
     this.root = root;
     this.move = { x: 0, y: 0 }; // -1..1, y > 0 is forward
     this.jump = false;
+    this.jumpLatch = false; // set on press, cleared once the game has seen it
     this.handlers = { onLook, onFire, onUse, onPause };
     this.pointers = new Map(); // pointerId -> { kind, x, y, ox, oy }
 
@@ -38,7 +39,7 @@ export class TouchControls {
   reset() {
     this.pointers.clear();
     this.move.x = this.move.y = 0;
-    this.jump = false;
+    this.jump = this.jumpLatch = false;
     this.showStick(null);
     for (const b of this.root.querySelectorAll('.pressed')) b.classList.remove('pressed');
   }
@@ -49,6 +50,7 @@ export class TouchControls {
   }
 
   down(e) {
+    if (this.root.hidden || e.pointerType === 'mouse') return;
     e.preventDefault();
     try {
       this.root.setPointerCapture(e.pointerId);
@@ -63,7 +65,7 @@ export class TouchControls {
       if (act === 'fire0') this.handlers.onFire(0);
       else if (act === 'fire1') this.handlers.onFire(1);
       else if (act === 'use') this.handlers.onUse();
-      else if (act === 'jump') this.jump = true;
+      else if (act === 'jump') this.jump = this.jumpLatch = true;
       else if (act === 'pause') this.handlers.onPause();
       return;
     }
