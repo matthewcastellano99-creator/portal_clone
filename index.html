@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Portal Clone · Test Chamber 01</title>
+  <meta name="description" content="A browser puzzle game in the spirit of Portal: place two linked portals and get the cube to the button.">
+  <link rel="stylesheet" href="style.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./vendor/three/three.module.min.js",
+        "three/addons/": "./vendor/three/addons/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="hud">
+    <svg id="crosshair" viewBox="-24 -24 48 48" aria-hidden="true">
+      <path id="ch-blue" class="arc blue" d="M -5 -12 A 13 13 0 0 0 -5 12" />
+      <path id="ch-orange" class="arc orange" d="M 5 -12 A 13 13 0 0 1 5 12" />
+      <circle r="1.4" fill="#fff" />
+    </svg>
+    <div id="hint"></div>
+    <div id="subtitle"></div>
+    <div id="debug"></div>
+  </div>
+
+  <div id="overlay" class="screen">
+    <div class="panel">
+      <div class="badge"><span class="dot blue"></span><span class="dot orange"></span></div>
+      <h1>PORTAL <span>CLONE</span></h1>
+      <p id="overlay-title" class="chamber">Test Chamber 01</p>
+      <button id="play">Click to begin testing</button>
+      <table class="controls">
+        <tr><td>Mouse</td><td>Look</td></tr>
+        <tr><td>W A S D</td><td>Move</td></tr>
+        <tr><td>Space</td><td>Jump</td></tr>
+        <tr><td>Left click</td><td>Blue portal</td></tr>
+        <tr><td>Right click</td><td>Orange portal</td></tr>
+        <tr><td>E</td><td>Pick up / drop cube</td></tr>
+        <tr><td>R</td><td>Restart chamber</td></tr>
+        <tr><td>Esc</td><td>Pause</td></tr>
+      </table>
+      <p class="note">Portals only stick to the white panels.</p>
+    </div>
+  </div>
+
+  <div id="complete" class="screen hidden">
+    <div class="panel">
+      <h1>CHAMBER <span>COMPLETE</span></h1>
+      <p id="complete-stats" class="chamber"></p>
+      <button id="replay">Play again</button>
+    </div>
+  </div>
+
+  <div id="loading" class="screen">Preparing test chamber…</div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
