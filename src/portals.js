@@ -405,25 +405,16 @@ export function teleportBody(body, P, ahead = null) {
 }
 
 function settleExit(body, Q, ahead) {
-  const a = Q.axis;
-  if (a !== 1) {
-    let inside = true;
-    for (const t of [Q.t1, Q.t2]) {
-      if (body.min(t) < Q.rmin[t] - 0.02 || body.max(t) > Q.rmax[t] + 0.02) inside = false;
-    }
-    if (!inside) {
-      const p = body.pos.getComponent(a);
-      const out = Q.sign > 0 ? Math.max(p, Q.plane + body.half[a] + 0.01) : Math.min(p, Q.plane - body.half[a] - 0.01);
-      body.pos.setComponent(a, out);
-    }
-    return;
-  }
+  // Keep the body inside the outline of the exit hole. Standing the player
+  // upright (or carrying sideways momentum) can leave part of the body
+  // outside it, e.g. feet below the bottom edge of a wall portal, which would
+  // put them inside the solid surface around the portal.
   for (const t of [Q.t1, Q.t2]) {
     const lo = Q.rmin[t] + body.half[t] + 0.01;
     const hi = Q.rmax[t] - body.half[t] - 0.01;
     if (lo <= hi) body.pos.setComponent(t, THREE.MathUtils.clamp(body.pos.getComponent(t), lo, hi));
   }
-  if (Q.sign > 0) {
+  if (Q.axis === 1 && Q.sign > 0) {
     // Coming up out of a floor: make sure there is enough speed to clear it.
     const depth = Q.plane - body.min(1);
     if (depth > 0) {

@@ -89,6 +89,82 @@ const result = await page.evaluate(() => {
   return steps;
 });
 
+// Fuzz: put the two portals at random spots on the white surfaces and throw
+// the player or the cube through one of them at random speeds and offsets.
+// After every physics step, nothing may be stuck inside solid geometry and
+// the player's eye may not sit behind a wall or a portal.
+const fuzz = await page.evaluate(() => {
+  const g = window.__game;
+  g.pause();
+  let seed = 7;
+  const rnd = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296;
+  const R = (a, b) => a + (b - a) * rnd();
+  const v = (x, y, z) => g.player.body.pos.clone().set(x, y, z);
+  // [ray origin, ray target] onto each portalable surface of the level
+  const surfaces = [
+    () => { const y = R(0.2, 3.8), z = R(-1.8, 5.8); return [v(-6, y, z), v(-9, y, z)]; },
+    () => { const y = R(4.2, 7.8), z = R(1.2, 6.8); return [v(7, y, z), v(9, y, z)]; },
+    () => { const y = R(4.2, 7.3), x = R(-6.8, -3.2); return [v(x, y, -8), v(x, y, -11)]; },
+    () => { const x = R(-1.8, 1.8), z = R(2.2, 5.8); return [v(x, 3, z), v(x, 0, z)]; },
+  ];
+  const inside = (p, b) => p.x > b.min[0] + 0.02 && p.x < b.max[0] - 0.02 && p.y > b.min[1] + 0.02 && p.y < b.max[1] - 0.02 && p.z > b.min[2] + 0.02 && p.z < b.max[2] - 0.02;
+  const behind = (p, Q) => Q.linked && Q.distance(p) < -0.03 &&
+    p.getComponent(Q.t1) > Q.rmin[Q.t1] && p.getComponent(Q.t1) < Q.rmax[Q.t1] &&
+    p.getComponent(Q.t2) > Q.rmin[Q.t2] && p.getComponent(Q.t2) < Q.rmax[Q.t2];
+  const problems = [];
+  let trials = 0, transits = 0;
+  const count = (obj, name) => {
+    const orig = obj[name];
+    obj[name] = function (P) { transits++; return orig.call(this, P); };
+    return () => (obj[name] = orig);
+  };
+  const restorePlayer = count(g, 'onPlayerTeleport');
+  const restoreCube = count(g, 'onCubeTeleport');
+  for (let n = 0; n < 160; n++) {
+    g.restart();
+    const [P0, P1] = g.portals.portals;
+    const ok = [P0, P1].every((P, i) => {
+      const [from, to] = surfaces[Math.floor(rnd() * 4)]();
+      const dir = to.clone().sub(from).normalize();
+      const look = v(R(-1, 1), 0, R(-1, 1)).normalize();
+      return g.portals.tryPlace(i, from, dir, look).ok;
+    });
+    if (!ok) continue;
+    trials++;
+    const entry = rnd() < 0.5 ? P0 : P1;
+    const useCube = rnd() < 0.3;
+    const body = useCube ? g.cube.body : g.player.body;
+    const start = entry.pos.clone().addScaledVector(entry.normal, R(0.9, 3))
+      .addScaledVector(entry.right, R(-0.3, 0.3)).addScaledVector(entry.up, R(-0.2, 0.2));
+    const speed = R(3, 16);
+    body.pos.copy(start);
+    body.vel.copy(entry.normal).multiplyScalar(-speed).addScaledVector(entry.right, R(-1, 1)).addScaledVector(entry.up, R(-1, 1));
+    if (entry.axis !== 1) body.vel.y += 10 * (start.distanceTo(entry.pos) / speed); // offset gravity on the way
+    body.portalMode = null;
+    g.physics.depenetrate(body, useCube ? body.box : undefined);
+    if (useCube) g.player.body.pos.set(0, 0.9001, 8.5); // keep the player out of the way
+    g.player.pitch = R(-1.4, 1);
+    for (let i = 0; i < 480; i++) {
+      g.step(1 / 120, { forward: 0, strafe: 0, jump: false });
+      const point = useCube ? body.pos : g.player.eye;
+      let issue = g.physics.statics.find((s) => inside(point, s)) ? 'inside a wall' : null;
+      if (!issue && !useCube && [P0, P1].some((Q) => behind(point, Q))) issue = 'eye behind a portal';
+      if (!issue && g.physics.collect(body, [0, 0, 0], useCube ? body.box : undefined).some((c) => g.physics.overlaps(body, c))) issue = 'overlapping geometry';
+      if (issue) {
+        problems.push({ trial: n, what: useCube ? 'cube' : 'player', step: i, issue, pos: body.pos.toArray().map((x) => +x.toFixed(2)), portals: [P0, P1].map((P) => P.pos.toArray().map((x) => +x.toFixed(2))) });
+        break;
+      }
+    }
+  }
+  restorePlayer();
+  restoreCube();
+  g.restart();
+  return { trials, transits, problems };
+});
+result.portalExitsClear = fuzz.problems.length === 0 && fuzz.transits >= 80;
+if (fuzz.problems.length) console.error('Portal exit problems:', JSON.stringify(fuzz.problems.slice(0, 5), null, 1));
+console.log(`Portal fuzz: ${fuzz.transits} transits in ${fuzz.trials} trials, ${fuzz.problems.length} problems`);
+
 await browser.close();
 server.close();
 
