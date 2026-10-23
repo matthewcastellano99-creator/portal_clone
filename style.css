@@ -285,6 +285,34 @@ button.secondary:hover {
   margin-top: 18px;
 }
 
+/* skin picker: two toggle buttons */
+.skins {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.skins-label {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-right: 4px;
+}
+
+button.skin {
+  padding: 7px 14px;
+  font-size: 12px;
+}
+
+button.skin[aria-pressed="true"] {
+  color: #0b0d10;
+  background: var(--ink);
+  border-color: var(--ink);
+}
+
 /* each chamber is shown as its wall sign */
 .chamber-tile {
   display: flex;
@@ -653,6 +681,14 @@ body.touch #hint {
 
   .chambers {
     margin-top: 12px;
+  }
+
+  .skins {
+    margin-top: 8px;
+  }
+
+  button.skin {
+    padding: 5px 12px;
   }
 
   .tile-num {

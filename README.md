@@ -10,6 +10,8 @@ There are three levels, joined by elevator rides:
 
 Pick any level from **Select level** on the start or pause menu. Levels you've finished are ticked (remembered in this browser). The pause menu also has **Restart level**.
 
+**Skin** on the same menu switches between the orange-suited test subject with the portal device, and an Arbiter-style Sangheili in silver armour carrying a portal tool shaped like a plasma rifle. Your pick is remembered in this browser.
+
 When the exit door opens, step into the glass elevator. It closes, rides up its shaft as the screen fades, shows the next level's card, and brings you down into the next level.
 
 **Play:** https://matthewcastellano99-creator.github.io/portal_clone/
@@ -103,7 +105,7 @@ npm test
 | `src/portalRenderer.js` | Renders the view through each portal, with recursion |
 | `src/player.js` | First-person movement (Source-style acceleration and friction) |
 | `src/cube.js`, `src/entities.js` | Weighted cube, floor button, door, indicator lights, elevators |
-| `src/gun.js`, `src/avatar.js` | First-person portal device and the third-person body |
+| `src/gun.js`, `src/avatar.js` | First-person device and the third-person body, for each skin |
 | `src/textures.js`, `src/materials.js` | Procedural panel, metal and floor textures |
 | `src/audio.js` | Synthesised sound effects and generative ambient music (WebAudio) |
 

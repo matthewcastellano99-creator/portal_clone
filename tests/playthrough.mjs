@@ -229,6 +229,19 @@ await page.click('[data-chamber="1"]');
 result.chamberMenuWorks = await page.evaluate(() => window.__game.levelIndex === 1 && !window.__game.state.paused &&
   document.getElementById('overlay').classList.contains('hidden'));
 
+// The skin picker swaps the body and device and is remembered.
+await page.evaluate(() => window.__game.pause());
+const pickSkin = (skin) => page.evaluate((skin) => document.querySelector(`[data-skin="${skin}"]`).click(), skin);
+await pickSkin('arbiter');
+for (let i = 0; i < 5; i++) await page.evaluate(() => window.__game.render());
+result.skinPickerWorks = await page.evaluate(() => {
+  const g = window.__game;
+  const ok = g.skin === 'arbiter' && localStorage.getItem('portal-clone:skin') === 'arbiter' &&
+    document.querySelector('[data-skin="arbiter"]').getAttribute('aria-pressed') === 'true' && g.avatar.root.children.length > 10;
+  return ok;
+});
+await pickSkin('subject');
+
 // Fuzz: put the two portals at random spots on the white surfaces and throw
 // the player or the cube through one of them at random speeds and offsets.
 // After every physics step, nothing may be stuck inside solid geometry and

@@ -67,6 +67,7 @@ class Game {
       completeChoose: document.getElementById('complete-choose'),
       restartChamber: document.getElementById('restart-chamber'),
       chambers: document.getElementById('chambers'),
+      skins: document.querySelectorAll('[data-skin]'),
       help: document.getElementById('help'),
       hint: document.getElementById('hint'),
       subtitle: document.getElementById('subtitle'),
@@ -156,7 +157,8 @@ class Game {
     this.composerTarget = new THREE.WebGLRenderTarget(1, 1, { type: this.targetType, samples: QUALITY.composerSamples });
     this.composer = new EffectComposer(renderer, this.composerTarget);
     this.composer.addPass(new RenderPass(scene, this.camera));
-    this.viewModel = new ViewModel(1);
+    this.skin = savedSkin();
+    this.viewModel = new ViewModel(1, this.skin);
     this.composer.addPass(new OverlayPass(this.viewModel.scene, this.viewModel.camera));
     if (this.halfFloat) {
       const { strength, radius, threshold } = RENDER.bloom;
@@ -175,8 +177,8 @@ class Game {
     this.portalRenderer = new PortalRenderer(this.renderer, scene, this.portals.portals, { samples: QUALITY.portalSamples, type: this.targetType });
 
     this.player = new Player();
-    this.avatar = new Avatar(scene, [1]);
-    this.avatarClone = new Avatar(scene, [0, 1]);
+    this.avatar = new Avatar(scene, [1], this.skin);
+    this.avatarClone = new Avatar(scene, [0, 1], this.skin);
     this.avatarClone.root.matrixAutoUpdate = false;
     this.effects = new Effects(scene);
     this.sfx = new Sfx();
@@ -212,6 +214,10 @@ class Game {
       const tile = e.target.closest('[data-chamber]');
       if (tile) this.selectChamber(Number(tile.dataset.chamber));
     });
+    for (const button of this.ui.skins) {
+      button.addEventListener('click', () => this.setSkin(button.dataset.skin));
+    }
+    this.showSkin();
     document.addEventListener('visibilitychange', () => {
       if (document.hidden && this.state.started && !this.state.paused && !this.state.completed) this.pause();
       if (!document.hidden && this.state.started && !this.state.paused && !this.state.completed) this.keepAwake();
@@ -347,6 +353,7 @@ class Game {
     this.ui.restartChamber.hidden = false;
     this.showChambers(false);
     this.ui.overlay.classList.remove('hidden');
+    this.ui.overlay.scrollTop = 0;
   }
 
   // The chamber cards in the start/pause menu. Every chamber can be picked;
@@ -366,6 +373,26 @@ class Game {
     this.ui.help.hidden = open;
     this.ui.chooseChamber.setAttribute('aria-expanded', String(open));
     this.ui.chooseChamber.textContent = open ? 'Hide levels' : 'Select level';
+  }
+
+  // The look of the player's body and device; remembered on this device.
+  setSkin(skin) {
+    if (skin === this.skin) return;
+    this.skin = skin;
+    this.viewModel.setSkin(skin);
+    this.avatar.setSkin(skin);
+    this.avatarClone.setSkin(skin);
+    this.dirty = true;
+    this.showSkin();
+    try {
+      localStorage.setItem(SKIN_KEY, skin);
+    } catch {
+      // not remembered
+    }
+  }
+
+  showSkin() {
+    for (const button of this.ui.skins) button.setAttribute('aria-pressed', String(button.dataset.skin === this.skin));
   }
 
   selectChamber(index) {
@@ -1118,6 +1145,18 @@ function markCompleted(number) {
   } catch {
     // not remembered
   }
+}
+
+const SKIN_KEY = 'portal-clone:skin';
+const SKINS = ['subject', 'arbiter'];
+function savedSkin() {
+  try {
+    const skin = localStorage.getItem(SKIN_KEY);
+    if (SKINS.includes(skin)) return skin;
+  } catch {
+    // storage unavailable
+  }
+  return 'subject';
 }
 
 // Free the GPU resources of a level that is being replaced, keeping the
