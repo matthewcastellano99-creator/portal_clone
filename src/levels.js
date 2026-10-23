@@ -7,7 +7,7 @@ import { b, slab, lamps, stripLight, observationWindow, chamberSign, dispenser }
 // positions are the centre of the car's floor; their yaw turns the doorway,
 // which faces +z at 0, towards the room.
 
-const TOTAL = 2;
+const TOTAL = 3;
 const DOOR_OPEN_LINE = 'The exit is open. Step into the elevator.';
 
 // Test Chamber 01
@@ -168,6 +168,102 @@ const chamber02 = {
   },
 };
 
+// Test Chamber 03
+//
+// A 6 m wide chasm separates the start side (south) from the goal side
+// (north), and the goal side has no white surface that can be seen from the
+// start. The way across is a fling: portal up onto the 8 m tower, put one
+// portal on the white floor at its foot and the other high on the south wall
+// (facing the chasm), and jump. The fall comes out of the wall at about
+// 20 m/s and carries across the chasm. The cube starts on the start side and
+// has to make the trip too. A white panel on the north face of a pillar on the
+// goal side (hidden from the start side) is the way back, and the chasm has a
+// white wall at its bottom so a fall into it isn't a dead end.
+const chamber03 = {
+  number: 3,
+  intro: 'Test Chamber 03. A body in motion stays in motion, even through a portal.',
+  doorOpen: DOOR_OPEN_LINE,
+  card: ['Fall far, fly far.', 'Bring the cube across the gap.'],
+  arrival: { pos: [0, 0, 12.6], yaw: Math.PI },
+  exit: { pos: [-12.6, 0, -11], yaw: Math.PI / 2 },
+  cube: [4.5, 0.37, 6.5],
+  button: [3.5, 0, -9],
+  door: { x: -8.5, y: 0, z: -11, width: 2, height: 2.6 },
+  antline: [[2.52, 0.05, -9], [-6, 0.05, -9], [-6, 0.05, -11], [-7.94, 0.05, -11]],
+  fillLight: [-12, 2.4, -11],
+  shadow: { x: -3.5, z: -1, half: 17 },
+  killY: -25,
+  boxes: [
+    // floors: start side (with a white patch at the tower's foot), goal side
+    // (reaching under the exit corridor), and the bottom of the chasm
+    ...slab(-9, 9, 2, 15, -1, 0, [[-4, -1, 5.5, 9.5]], 'metal', { top: 'floor' }),
+    b(-4, -1, 5.5, -1, 0, 9.5, 'metal', { top: 'whiteFloor' }),
+    b(-16, -1, -17, 9, 0, -4, 'metal', { top: 'floor' }),
+    b(-9, -6, -4, 9, -5, 2, 'metal', { top: 'floor' }),
+    // chasm walls; the south one has a white panel at the bottom
+    b(-9, -5, 2, -2, -1, 3, 'metal'),
+    b(-2, -5, 2, 2, -1, 3, 'white'),
+    b(2, -5, 2, 9, -1, 3, 'metal'),
+    b(-9, -5, -5, 9, -1, -4, 'metal'),
+    b(-9, -6, -4, -8, 0, 2, 'metal'),
+    b(8, -6, -4, 9, 0, 2, 'metal'),
+    // ceiling
+    b(-9, 14, -17, 9, 15, 11, 'metal', { castShadow: false }),
+    // south wall: white strip high up (the fling exit) above the arrival alcove
+    b(-9, 0, 10, -3, 14, 11, 'metal'),
+    b(3, 0, 10, 9, 14, 11, 'metal'),
+    b(-3, 0, 10, -2, 8, 11, 'metal'),
+    b(2, 0, 10, 3, 8, 11, 'metal'),
+    b(-2, 7.6, 10, 2, 8, 11, 'metal'),
+    b(-3, 8, 10, 3, 12, 11, 'white'),
+    b(-3, 12, 10, 3, 14, 11, 'metal'),
+    // arrival alcove
+    b(-3, 0, 11, -2, 7.6, 15, 'metal'),
+    b(2, 0, 11, 3, 7.6, 15, 'metal'),
+    b(-3, 0, 14, 3, 7.6, 15, 'metal'),
+    b(-3, 7.6, 11, 3, 8.6, 15, 'metal', { castShadow: false }),
+    // the tower against the south-west corner, white wall above its top
+    b(-8, 0, 5, -4, 8, 10, 'metal', { top: 'floor' }),
+    b(-9, 0, 2, -8, 14, 6, 'metal'),
+    b(-9, 0, 6, -8, 8, 9.5, 'metal'),
+    b(-9, 8, 6, -8, 12.5, 9.5, 'white'),
+    b(-9, 12.5, 6, -8, 14, 9.5, 'metal'),
+    b(-9, 0, 9.5, -8, 14, 11, 'metal'),
+    // east wall: tall white panel on the start side
+    b(8, 0, 2, 9, 14, 3, 'metal'),
+    b(8, 0, 3, 9, 10, 9, 'white'),
+    b(8, 10, 3, 9, 14, 9, 'metal'),
+    b(8, 0, 9, 9, 14, 11, 'metal'),
+    b(8, 0, -17, 9, 14, -4, 'metal'),
+    // goal side: north wall, west wall with the exit doorway
+    b(-9, 0, -17, 9, 14, -16, 'metal'),
+    b(-9, 0, -17, -8, 14, -12, 'metal'),
+    b(-9, 0, -10, -8, 14, -4, 'metal'),
+    b(-9, 2.6, -12, -8, 14, -10, 'metal'),
+    // walls above the chasm
+    b(-9, 0, -4, -8, 14, 2, 'metal'),
+    b(8, 0, -4, 9, 14, 2, 'metal'),
+    // the way back: a pillar whose north face (hidden from the start side) is white
+    b(-1, 0, -12.9, 1, 3.2, -11, 'metal'),
+    b(-1, 0, -13, 1, 3.2, -12.9, 'white'),
+    // exit corridor and elevator shaft
+    b(-16, 0, -13.5, -9, 3, -12.5, 'metal'),
+    b(-16, 0, -9.5, -9, 3, -8.5, 'metal'),
+    b(-16, 0, -12.5, -15, 3, -9.5, 'metal'),
+    ...slab(-16, -9, -13.5, -8.5, 3, 4, [[-13.9, -11.3, -12.3, -9.7]], 'metal', { castShadow: false }),
+    ...shaft(-13.9, -11.3, -12.3, -9.7, 3, 10),
+    // cube dispenser tube on the start side
+    b(3.9, 10, 5.9, 5.1, 14, 7.1, 'metal', { hidden: true }),
+  ],
+  decor(root) {
+    lamps(root, [-4, 4], [-12, -6, 0, 6], 14);
+    stripLight(root, -10.6, 3, -11, 1.4, 'x');
+    observationWindow(root, 0, 9, -16, 0);
+    chamberSign(root, 4.6, 1.9, 10, Math.PI, { number: 3, total: TOTAL, lit: [true, true, true, true, true, false], lines: this.card });
+    dispenser(root, 4.5, 6.5, 10, 14);
+  },
+};
+
 // Walls of a vertical shaft over a hole x0..x1, z0..z1, from y0 up to y1,
 // capped at the top.
 function shaft(x0, x1, z0, z1, y0, y1) {
@@ -180,4 +276,4 @@ function shaft(x0, x1, z0, z1, y0, y1) {
   ];
 }
 
-export const LEVELS = [chamber01, chamber02];
+export const LEVELS = [chamber01, chamber02, chamber03];

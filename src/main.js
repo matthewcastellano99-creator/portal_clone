@@ -63,6 +63,11 @@ class Game {
       complete: document.getElementById('complete'),
       stats: document.getElementById('complete-stats'),
       replay: document.getElementById('replay'),
+      chooseChamber: document.getElementById('choose-chamber'),
+      completeChoose: document.getElementById('complete-choose'),
+      restartChamber: document.getElementById('restart-chamber'),
+      chambers: document.getElementById('chambers'),
+      help: document.getElementById('help'),
       hint: document.getElementById('hint'),
       subtitle: document.getElementById('subtitle'),
       chBlue: document.getElementById('ch-blue'),
@@ -192,6 +197,20 @@ class Game {
     this.ui.replay.addEventListener('click', () => {
       this.newGame();
       this.begin(true);
+    });
+    this.ui.chooseChamber.addEventListener('click', () => this.showChambers(this.ui.chambers.hidden));
+    this.ui.completeChoose.addEventListener('click', () => {
+      this.ui.complete.classList.add('hidden');
+      this.ui.overlay.classList.remove('hidden');
+      this.showChambers(true);
+    });
+    this.ui.restartChamber.addEventListener('click', () => {
+      this.restart();
+      this.begin(true);
+    });
+    this.ui.chambers.addEventListener('click', (e) => {
+      const tile = e.target.closest('[data-chamber]');
+      if (tile) this.selectChamber(Number(tile.dataset.chamber));
     });
     document.addEventListener('visibilitychange', () => {
       if (document.hidden && this.state.started && !this.state.paused && !this.state.completed) this.pause();
@@ -323,9 +342,36 @@ class Game {
     this.keys.clear();
     this.drag = null;
     this.touch.enabled = false;
-    this.ui.overlayTitle.textContent = 'Paused';
+    this.ui.overlayTitle.textContent = `Paused · ${chamberName(this.level)}`;
     this.ui.play.textContent = document.body.classList.contains('touch') ? 'Tap to resume' : 'Click to resume';
+    this.ui.restartChamber.hidden = false;
+    this.showChambers(false);
     this.ui.overlay.classList.remove('hidden');
+  }
+
+  // The chamber cards in the start/pause menu. Every chamber can be picked;
+  // finished ones are ticked (remembered on this device only).
+  showChambers(open) {
+    const done = completedChambers();
+    this.ui.chambers.innerHTML = LEVELS.map((def, i) => {
+      const finished = done.has(def.number);
+      const current = i === this.levelIndex && this.state.started;
+      const state = finished ? '✓ Completed' : current ? 'Current' : 'Not yet solved';
+      const bar = LEVELS.map((_, k) => `<i class="${k < def.number ? 'on' : ''}"></i>`).join('');
+      return `<button class="chamber-tile${finished ? ' done' : ''}${current ? ' current' : ''}" data-chamber="${i}" aria-label="Play ${chamberName(def)}">` +
+        `<span class="tile-num">${pad2(def.number)}</span><span class="tile-bar">${bar}</span>` +
+        `<span class="tile-line">${def.card[0]}</span><span class="tile-state">${state}</span></button>`;
+    }).join('');
+    this.ui.chambers.hidden = !open;
+    this.ui.help.hidden = open;
+    this.ui.chooseChamber.setAttribute('aria-expanded', String(open));
+    this.ui.chooseChamber.textContent = open ? 'Hide chambers' : 'Select chamber';
+  }
+
+  selectChamber(index) {
+    this.newGame(index);
+    this.showChambers(false);
+    this.begin(true);
   }
 
   // Stop the screen dimming while playing on a phone. Optional everywhere.
@@ -379,6 +425,7 @@ class Game {
     sc.left = sc.bottom = -half;
     sc.right = sc.top = half;
     sc.updateProjectionMatrix();
+    if (!this.state.started) this.ui.overlayTitle.textContent = chamberName(def);
     this.restart();
   }
 
@@ -412,14 +459,15 @@ class Game {
   }
 
   // Back to the first chamber with fresh totals.
-  newGame() {
+  newGame(index = 0) {
     this.transition = null;
     this.fade(false);
     this.state.completed = false;
     this.state.time = 0;
     this.state.portalsFired = 0;
     this.introShown = false;
-    this.loadLevel(0);
+    this.ui.complete.classList.add('hidden');
+    this.loadLevel(index);
   }
 
   onResize() {
@@ -738,6 +786,7 @@ class Game {
   // tests can drive it.
 
   startDeparture() {
+    markCompleted(this.level.number);
     this.dropCube();
     this.transition = { phase: 'depart', t: 0 };
     this.touch.enabled = false;
@@ -821,9 +870,8 @@ class Game {
   fade(on, next) {
     const el = this.ui.fade;
     if (on && next) {
-      const pad = (n) => String(n).padStart(2, '0');
-      el.querySelector('.card-number').textContent = pad(next.number);
-      el.querySelector('.card-count').textContent = `${pad(next.number)}/${pad(LEVELS.length)}`;
+      el.querySelector('.card-number').textContent = pad2(next.number);
+      el.querySelector('.card-count').textContent = `${pad2(next.number)}/${pad2(LEVELS.length)}`;
       el.querySelector('.card-bar').innerHTML = LEVELS.map((_, i) => `<i class="${i < next.number ? 'on' : ''}"></i>`).join('');
       el.querySelector('.card-lines').innerHTML = next.card.map((l) => `<p>${l}</p>`).join('');
     }
@@ -875,17 +923,24 @@ class Game {
     else this.dropCube();
   }
 
-  // Steer falling bodies gently towards the centre of a floor portal below.
+  // Steer a falling body into a floor portal below it, so a jump or a step
+  // off a ledge that is roughly on target goes in. Within a cone that widens
+  // with height, the body's sideways speed is eased towards the speed that
+  // lands it on the portal's centre. Low hops (such as popping out of a
+  // floor portal) and anything flying fast (a fling) are left alone.
   funnel(body, h) {
-    if (body.onGround || body.vel.y > -1) return;
+    if (body.onGround || body.vel.y > -0.5 || Math.hypot(body.vel.x, body.vel.z) > 7) return;
     for (const P of this.portals.portals) {
       if (!P.linked || P.axis !== 1 || P.sign < 0) continue;
       const height = body.min(1) - P.plane;
-      if (height < 1.2 || height > 8) continue;
+      if (height < 0.6 || height > 12) continue;
       const dx = P.pos.x - body.pos.x, dz = P.pos.z - body.pos.z;
-      if (Math.hypot(dx, dz) > 1.6) continue;
-      body.vel.x += dx * 25 * h;
-      body.vel.z += dz * 25 * h;
+      if (Math.hypot(dx, dz) > Math.min(4, 1 + 0.35 * height)) continue;
+      const fall = -body.vel.y, g = PHYSICS.gravity;
+      const t = (-fall + Math.sqrt(fall * fall + 2 * g * height)) / g; // until the feet reach the portal
+      const k = Math.min(1, 8 * h);
+      body.vel.x += (dx / t - body.vel.x) * k;
+      body.vel.z += (dz / t - body.vel.z) * k;
     }
   }
 
@@ -1039,6 +1094,29 @@ class Game {
       console.warn('Could not restore the saved game', err);
       this.restart();
     }
+  }
+}
+
+const pad2 = (n) => String(n).padStart(2, '0');
+const chamberName = (def) => `Test Chamber ${pad2(def.number)}`;
+
+// Which chambers this device has finished. Storage can be unavailable
+// (private windows, embedded views), in which case nothing is remembered.
+const COMPLETED_KEY = 'portal-clone:completed';
+function completedChambers() {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(COMPLETED_KEY)) ?? []);
+  } catch {
+    return new Set();
+  }
+}
+function markCompleted(number) {
+  try {
+    const done = completedChambers();
+    done.add(number);
+    localStorage.setItem(COMPLETED_KEY, JSON.stringify([...done]));
+  } catch {
+    // not remembered
   }
 }
 

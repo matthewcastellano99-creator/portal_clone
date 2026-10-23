@@ -400,6 +400,11 @@ export function teleportBody(body, P, ahead = null) {
   const Q = P.partner;
   const ref = body.refPoint(new THREE.Vector3()).applyMatrix4(P.toPartner);
   body.vel.applyQuaternion(P.rotToPartner);
+  // Fast exits come out straight: most sideways speed is shed, so a fling
+  // goes where the portal points rather than wherever the body was drifting
+  // when it fell in.
+  const out = body.vel.dot(Q.normal);
+  if (out > 8) body.vel.addScaledVector(body.vel.clone().addScaledVector(Q.normal, -out), -0.7);
   body.pos.set(ref.x, ref.y - body.refOffset, ref.z);
   settleExit(body, Q, ahead ?? Q.up);
   body.portalMode = Q;

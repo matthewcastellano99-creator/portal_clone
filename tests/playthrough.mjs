@@ -1,6 +1,7 @@
-// Headless end-to-end check: plays both test chambers (and the elevator ride
-// between them) through the game's own simulation, then stress-tests portal
-// transits. Fails if any step doesn't happen or the page logs an error.
+// Headless end-to-end check: plays every test chamber (and the elevator rides
+// between them) through the game's own simulation, checks Chamber 03 can't
+// trap the player, stress-tests portal transits in every chamber and drives
+// the chamber menu. Fails if any step doesn't happen or the page logs an error.
 //
 //   npm install && npm test
 import http from 'node:http';
@@ -126,10 +127,107 @@ const result = await page.evaluate(() => {
   walk(2.5);
   steps.cubeOnAlcoveButton = g.button.pressed && g.button.isOn(g.cube.body) && g.door.open === 1;
   walkTo(-4, 1.5); walkTo(-8.5, 1.5); walkTo(-9, -5); walkTo(-14.6, -5);
+  walk(10);
+  steps.arrivedInChamber03 = g.levelIndex === 2 && !g.transition;
+  const cube3 = g.cube.body.pos; // a new chamber has a new cube
+
+  // Chamber 03: carry the cube up the tower, re-aim the portals for a fling
+  // (white floor at the tower's foot, high strip on the south wall), drop
+  // the cube off the edge, then step off and fly across the chasm.
+  walkTo(3.2, 7.8);
+  lookAt(cube3.x, cube3.y, cube3.z); g.use();
+  walk(0.6);
+  walkTo(6.3, 6.5);
+  lookAt(8, 1.2, 6); g.shoot(0); // east wall, at the floor
+  lookAt(-8, 11.8, 7.7); g.shoot(1); // wall above the tower
+  walkTo(5.6, blue.pos.z);
+  lookAt(8, g.player.eye.y - 0.2, blue.pos.z);
+  walk(0.5);
+  steps.climbedTower = walkUntilTeleport({ forward: 1 }) && g.cube.held;
+  walk(0.6);
+  walkTo(-4.4, 7.5);
+  lookAt(-1.2, 0, 7.5); g.shoot(0); // floor at the tower's foot
+  lookAt(0, 9.5, 10); g.shoot(1); // high on the south wall, facing the chasm
+  walkTo(-4.5, 7.5);
+  lookAt(-2.5, 3, 7.5);
+  walk(1.0);
+  g.use(); // drop the cube off the edge
+  walk(3);
+  steps.cubeFlungAcross = cube3.z < -4.5 && cube3.y > -0.1 && cube3.y < 1;
+  lookAt(0, 9.6, 7.5);
+  walk(2.5, { forward: 1 }); // step off
+  walk(2);
+  steps.playerFlungAcross = g.player.body.pos.z < -4.5 && g.player.body.onGround && g.player.body.pos.y > 0;
+  walkTo(cube3.x + 1.2, cube3.z + 1.2);
+  lookAt(cube3.x, cube3.y, cube3.z); g.use();
+  walk(0.5);
+  walkTo(3.5, -7.4);
+  lookAt(3.5, 0.4, -9);
+  walk(0.8);
+  g.use();
+  walk(1.5);
+  steps.goalButtonPressed = g.button.isOn(g.cube.body) && g.door.open === 1;
+  walkTo(-6, -11); walkTo(-12.6, -11);
   walk(5);
   steps.completed = g.state.completed;
   return steps;
 });
+
+// Chamber 03 can't trap you: a fall into the chasm can be portalled out of,
+// and from the goal side the pillar's hidden white face leads back.
+const escapes = await page.evaluate(() => {
+  const g = window.__game;
+  const idle = { forward: 0, strafe: 0, jump: false };
+  const lookAt = (x, y, z) => {
+    const e = g.player.eye, dx = x - e.x, dy = y - e.y, dz = z - e.z;
+    g.player.yaw = Math.atan2(-dx, -dz);
+    g.player.pitch = Math.asin(dy / Math.hypot(dx, dy, dz));
+  };
+  // Line up 1.5 m in front of a wall portal, then walk straight in.
+  const walkIn = (P) => {
+    let n = 0;
+    const orig = g.onPlayerTeleport;
+    g.onPlayerTeleport = (Q) => { n++; orig.call(g, Q); };
+    const spot = P.pos.clone().addScaledVector(P.normal, 1.5);
+    for (let i = 0; i < 600; i++) {
+      const p = g.player.body.pos, dx = spot.x - p.x, dz = spot.z - p.z;
+      if (Math.hypot(dx, dz) < 0.1) break;
+      g.player.yaw = Math.atan2(-dx, -dz);
+      g.step(1 / 120, { ...idle, forward: Math.min(1, Math.hypot(dx, dz)) });
+    }
+    lookAt(P.pos.x, g.player.eye.y, P.pos.z);
+    for (let i = 0; i < 600 && !n; i++) g.step(1 / 120, { ...idle, forward: 1 });
+    g.onPlayerTeleport = orig;
+    g.step(2, idle);
+    return n > 0;
+  };
+  const [blue, orange] = g.portals.portals;
+  g.newGame(2);
+  g.player.body.pos.set(0, -4.0999, -1); // fell into the chasm
+  lookAt(0, -3.5, 2); g.shoot(0); // white panel at the bottom of the chasm wall
+  lookAt(8, 8, 6); g.shoot(1); // the tall white panel on the start side, seen over the rim
+  const outOfChasm = blue.placed && orange.placed && walkIn(blue) && g.player.body.pos.y > 0.5 && g.player.body.pos.z > 2;
+  g.newGame(2);
+  g.player.body.pos.set(3, 0.9001, -15); // on the goal side, north of the pillar
+  lookAt(0, 1.2, -13); g.shoot(0); // the pillar's hidden face
+  lookAt(8, 5, 6); g.shoot(1); // back on the start side
+  const wayBack = blue.placed && orange.placed && walkIn(blue) && g.player.body.pos.z > 2;
+  g.newGame();
+  return { outOfChasm, wayBack };
+});
+Object.assign(result, escapes);
+
+// The chamber menu: open it from the start screen and pick Chamber 02.
+await page.evaluate(() => {
+  const g = window.__game;
+  g.newGame();
+  g.state.started = false;
+  g.pause();
+});
+await page.click('#choose-chamber');
+await page.click('[data-chamber="1"]');
+result.chamberMenuWorks = await page.evaluate(() => window.__game.levelIndex === 1 && !window.__game.state.paused &&
+  document.getElementById('overlay').classList.contains('hidden'));
 
 // Fuzz: put the two portals at random spots on the white surfaces and throw
 // the player or the cube through one of them at random speeds and offsets.
@@ -155,9 +253,17 @@ const runFuzz = (level) => page.evaluate((level) => {
     () => { const x = R(-2.8, 0.8), z = R(-3.8, -0.2); return [v(x, 3, z), v(x, 0, z)]; }, // floor patch
     () => { const x = R(-6.6, -4.4), z = R(-15.4, -13.2); return [v(x, 3, z), v(x, 5.4, z)]; }, // alcove ceiling
     () => { const y = R(3.2, 7.8), z = R(-1.8, 5.8); return [v(7, y, z), v(10, y, z)]; }, // high east wall
+  ], [
+    () => { const x = R(-3.8, -1.2), z = R(5.7, 9.3); return [v(x, 3, z), v(x, 0, z)]; }, // floor at the tower's foot
+    () => { const x = R(-2.8, 2.8), y = R(8.2, 11.8); return [v(x, y, 6), v(x, y, 10)]; }, // south wall strip
+    () => { const y = R(8.2, 12.3), z = R(6.2, 9.3); return [v(-6, y, z), v(-8, y, z)]; }, // above the tower
+    () => { const y = R(0.2, 9.8), z = R(3.2, 8.8); return [v(6, y, z), v(8, y, z)]; }, // east wall
+    () => { const x = R(-1.8, 1.8), y = R(-4.8, -1.2); return [v(x, y, -1), v(x, y, 2)]; }, // chasm wall
+    () => { const x = R(-0.8, 0.8), y = R(0.2, 3.0); return [v(x, y, -15), v(x, y, -13)]; }, // pillar (way back)
   ]][level];
   const inside = (p, b) => p.x > b.min[0] + 0.02 && p.x < b.max[0] - 0.02 && p.y > b.min[1] + 0.02 && p.y < b.max[1] - 0.02 && p.z > b.min[2] + 0.02 && p.z < b.max[2] - 0.02;
-  const behind = (p, Q) => Q.linked && Q.distance(p) < -0.03 &&
+  // inside the hole just behind a portal (not merely somewhere behind its wall)
+  const behind = (p, Q) => Q.linked && Q.distance(p) < -0.03 && Q.distance(p) > -3 &&
     p.getComponent(Q.t1) > Q.rmin[Q.t1] && p.getComponent(Q.t1) < Q.rmax[Q.t1] &&
     p.getComponent(Q.t2) > Q.rmin[Q.t2] && p.getComponent(Q.t2) < Q.rmax[Q.t2];
   const problems = [];
@@ -173,7 +279,7 @@ const runFuzz = (level) => page.evaluate((level) => {
     g.restart();
     const [P0, P1] = g.portals.portals;
     const ok = [P0, P1].every((P, i) => {
-      const [from, to] = surfaces[Math.floor(rnd() * 4)]();
+      const [from, to] = surfaces[Math.floor(rnd() * surfaces.length)]();
       const dir = to.clone().sub(from).normalize();
       const look = v(R(-1, 1), 0, R(-1, 1)).normalize();
       return g.portals.tryPlace(i, from, dir, look).ok;
@@ -212,7 +318,7 @@ const runFuzz = (level) => page.evaluate((level) => {
   g.newGame();
   return { trials, transits, problems };
 }, level);
-for (const level of [0, 1]) {
+for (const level of [0, 1, 2]) {
   const fuzz = await runFuzz(level);
   result[`portalExitsClear${level + 1}`] = fuzz.problems.length === 0 && fuzz.transits >= 80;
   if (fuzz.problems.length) console.error('Portal exit problems:', JSON.stringify(fuzz.problems.slice(0, 5), null, 1));
@@ -282,4 +388,4 @@ if (failed.length || errors.length) {
   console.error(`FAILED: ${[...failed, ...(errors.length ? ['page errors'] : [])].join(', ')}`);
   process.exit(1);
 }
-console.log('Both test chambers solved.');
+console.log('All test chambers solved.');

@@ -61,6 +61,12 @@
       <h1>PORTAL <span>CLONE</span></h1>
       <p id="overlay-title" class="chamber">Test Chamber 01</p>
       <button id="play">Click to begin testing</button>
+      <div class="menu-row">
+        <button id="restart-chamber" class="secondary" hidden>Restart chamber</button>
+        <button id="choose-chamber" class="secondary" aria-expanded="false" aria-controls="chambers">Select chamber</button>
+      </div>
+      <div id="chambers" class="chambers" hidden></div>
+      <div id="help">
       <table class="controls touch-only">
         <tr><td>Left thumb</td><td>Move</td></tr>
         <tr><td>Drag on the right</td><td>Look</td></tr>
@@ -79,6 +85,7 @@
         <tr><td>Esc</td><td>Pause</td></tr>
       </table>
       <p class="note">Portals only stick to the white panels.</p>
+      </div>
     </div>
   </div>
 
@@ -86,7 +93,10 @@
     <div class="panel">
       <h1>TESTING <span>COMPLETE</span></h1>
       <p id="complete-stats" class="chamber"></p>
-      <button id="replay">Play again</button>
+      <div class="menu-row">
+        <button id="replay">Play again</button>
+        <button id="complete-choose" class="secondary">Select chamber</button>
+      </div>
     </div>
   </div>
 

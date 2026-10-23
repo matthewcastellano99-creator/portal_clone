@@ -2,10 +2,13 @@
 
 A small first-person puzzle game for the browser, inspired by Valve's *Portal*. You carry a device that fires two linked portals, and you use them to get a weighted cube onto a button to open the exit.
 
-There are two test chambers, joined by an elevator ride:
+There are three test chambers, joined by elevator rides:
 
 - **Test Chamber 01:** the basics. The cube is up on a ledge and the button is up on a platform; portals only stick to white panels.
 - **Test Chamber 02:** moving things with gravity. The cube sits at the bottom of a pit you can't reach, and the button is in an alcove you can't climb into. Whatever falls into one portal falls out of the other.
+- **Test Chamber 03:** the fling. A chasm separates you from the button, and nothing on the far side holds a portal. Fall far enough into one portal and you come flying out of the other. The cube has to make the trip too.
+
+Pick any chamber from **Select chamber** on the start or pause menu. Chambers you've finished are ticked (remembered in this browser). The pause menu also has **Restart chamber**.
 
 When the exit door opens, step into the glass elevator. It closes, rides up its shaft as the screen fades, shows the next chamber's card, and brings you down into the next chamber.
 
@@ -46,7 +49,7 @@ Portals only stick to the **white panels**. Dark metal, the door and the cube st
 ## Features
 
 - See-through portals with recursive views (a portal can show itself inside itself).
-- Momentum is kept through portals, so falling into a floor portal flings you out of a wall portal.
+- Momentum is kept through portals, so falling into a floor portal flings you out of a wall portal. Fast exits come out straight along the portal, and a falling body that's roughly over a floor portal is steered into it, so flings are predictable.
 - Carry the cube through portals, or grab it through one. Portal shots pass through the cube, so aiming at it puts a portal under it.
 - Elevator transitions between chambers, with a chamber card while the next one loads.
 - Floor button, sliding exit door and indicator lights.
