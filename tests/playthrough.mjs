@@ -239,7 +239,7 @@ for (let i = 0; i < 5; i++) await page.evaluate(() => window.__game.render());
 result.skinPickerWorks = await page.evaluate(() => {
   const g = window.__game;
   const ok = g.skin === 'arbiter' && localStorage.getItem('portal-clone:skin') === 'arbiter' &&
-    document.querySelector('[data-skin="arbiter"]').getAttribute('aria-pressed') === 'true' && g.avatar.root.children.length > 10;
+    document.querySelector('[data-skin="arbiter"]').getAttribute('aria-pressed') === 'true' && g.avatar.skin === 'arbiter' && g.avatarClone.skin === 'arbiter';
   return ok;
 });
 await pickSkin('subject');

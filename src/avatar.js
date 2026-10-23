@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { buildGunModel, disposeMeshes } from './gun.js';
-import { sweep, armorBump, weaveBump, skinBump } from './sculpt.js';
+import { sweep, mergeByMaterial, armorBump, weaveBump, skinBump } from './sculpt.js';
 
 // The player's figure, only ever seen through portals (and in shadow).
 // Origin is at the feet; faces -z. Each skin builds the same moving parts:
@@ -19,6 +19,7 @@ export class Avatar {
       this.root.remove(child);
       disposeMeshes(child);
     }
+    this.skin = skin;
     this.legs = [];
     this.knees = [];
     if (skin === 'arbiter') this.buildArbiter();
@@ -34,6 +35,7 @@ export class Avatar {
     this.muzzlePoint.position.set(0, 0, -0.28);
     gun.group.add(this.muzzlePoint);
 
+    mergeByMaterial(this.root);
     const layers = this.layers;
     this.root.traverse((o) => {
       if (o.isMesh) o.castShadow = true;
@@ -81,7 +83,7 @@ export class Avatar {
       // blade that runs down behind the heel
       add(sweep([[0, -0.6, 0.0], [0, -0.73, 0.0]], { width: 0.064, height: 0.064, arc: [0.55, 0.95], up: fwd, segments: 4 }), blade, lower);
       add(sweep([[0, -0.64, 0.06], [0, -0.75, 0.1], [0, -0.86, 0.1], [0, -0.92, 0.05], [0, -0.935, 0.0]], {
-        width: [0.016, 0.02, 0.02, 0.016, 0.01], height: 0.006, up: [0, 0, 1], segments: 28,
+        width: [0.016, 0.02, 0.02, 0.016, 0.01], height: 0.006, up: [0, 0, 1], segments: 20,
       }), blade, lower);
       this.root.add(hip);
       this.legs.push(hip);
@@ -95,7 +97,7 @@ export class Avatar {
       add(sweep([[0.015 * k, 0.94, -0.13], [0.05 * k, 0.84, -0.14], [0.06 * k, 0.74, -0.13]], { width: [0.036, 0.034, 0.028], height: [0.02, 0.02, 0.016] }), suit);
     }
     add(sweep([[0, 0.97, 0], [0, 1.1, -0.006], [0, 1.24, -0.012], [0, 1.36, 0.0], [0, 1.43, 0.005]], {
-      width: [0.15, 0.135, 0.155, 0.165, 0.12], height: [0.1, 0.092, 0.105, 0.1, 0.075], up: fwd, radial: 24,
+      width: [0.15, 0.135, 0.155, 0.165, 0.12], height: [0.1, 0.092, 0.105, 0.1, 0.075], up: fwd, radial: 16,
     }), tank);
     add(sweep([[0, 1.34, 0.0], [0, 1.42, 0.0], [0, 1.47, 0.0]], { width: [0.17, 0.16, 0.06], height: [0.095, 0.085, 0.05], up: fwd }), skin);
     add(sweep([[0, 1.44, 0.0], [0, 1.53, -0.01]], { width: 0.046, height: 0.05, up: fwd, segments: 4 }), skin);
@@ -112,7 +114,7 @@ export class Avatar {
     }), skin, head);
     add(sweep([[0, 0.0, -0.095], [0, -0.025, -0.11]], { width: [0.008, 0.012], height: [0.006, 0.01], segments: 3 }), skin, head);
     add(sweep([[0, 0.0, 0.105], [0, 0.035, 0.03], [0, 0.03, -0.05], [0, 0.015, -0.085]], {
-      width: [0.062, 0.09, 0.086, 0.07], height: [0.07, 0.104, 0.098, 0.07], arc: [-0.07, 0.57], radial: 24,
+      width: [0.062, 0.09, 0.086, 0.07], height: [0.07, 0.104, 0.098, 0.07], arc: [-0.07, 0.57], radial: 16,
     }), hair, head);
     add(sweep([[0, 0.03, 0.1], [0, -0.04, 0.15], [0, -0.13, 0.14], [0, -0.22, 0.115]], { width: [0.032, 0.03, 0.022, 0.003], height: [0.03, 0.026, 0.02, 0.003] }), hair, head);
     add(new THREE.TorusGeometry(0.03, 0.006, 6, 16), dark, head).position.set(0, 0.022, 0.112);
@@ -209,7 +211,7 @@ export class Avatar {
 
     // pelvis, belt and the plates hanging from it
     add(sweep([[0, 0.88, 0], [0, 0.96, 0], [0, 1.04, 0]], { width: [0.17, 0.2, 0.17], height: [0.12, 0.14, 0.12], exp: 2.4, up: fwd }), trim);
-    add(sweep([[0, 0.985, 0], [0, 1.03, 0]], { width: 0.207, height: 0.152, exp: 2.6, up: fwd, segments: 2, radial: 28 }), armor);
+    add(sweep([[0, 0.985, 0], [0, 1.03, 0]], { width: 0.207, height: 0.152, exp: 2.6, up: fwd, segments: 2, radial: 16 }), armor);
     add(sweep([[0, 0.98, -0.15], [0, 0.86, -0.18], [0, 0.72, -0.17]], { width: [0.09, 0.085, 0.055], height: 0.012, exp: 4, up: fwd }), armor);
     add(sweep([[0, 0.98, 0.14], [0, 0.84, 0.17], [0, 0.7, 0.16]], { width: [0.1, 0.09, 0.06], height: 0.012, exp: 4, up: [0, 0, 1] }), trim);
     for (const s of [-1, 1]) {
@@ -226,7 +228,7 @@ export class Avatar {
       }), armor);
     }
     add(sweep([[0, 1.18, 0.0], [0, 1.3, -0.015], [0, 1.42, 0.0], [0, 1.5, 0.02]], {
-      width: [0.19, 0.26, 0.27, 0.17], height: [0.14, 0.175, 0.17, 0.12], exp: 2.5, up: fwd, radial: 28,
+      width: [0.19, 0.26, 0.27, 0.17], height: [0.14, 0.175, 0.17, 0.12], exp: 2.5, up: fwd, radial: 16,
     }), armor);
     add(sweep([[0, 1.22, -0.145], [0, 1.33, -0.19], [0, 1.46, -0.16]], { width: [0.008, 0.014, 0.008], height: [0.012, 0.02, 0.01], up: fwd }), trim);
     for (const s of [-1, 1]) {
@@ -236,7 +238,7 @@ export class Avatar {
     }
     add(sweep([[0, 1.2, 0.12], [0, 1.34, 0.155], [0, 1.48, 0.12]], { width: [0.12, 0.16, 0.12], height: [0.035, 0.05, 0.035], exp: 3, up: [0, 0, 1] }), armor);
     add(sweep([[-0.13, 1.47, -0.04], [-0.12, 1.53, 0.06], [0, 1.57, 0.11], [0.12, 1.53, 0.06], [0.13, 1.47, -0.04]], {
-      width: [0.02, 0.025, 0.025, 0.025, 0.02], height: [0.035, 0.05, 0.06, 0.05, 0.035], segments: 28,
+      width: [0.02, 0.025, 0.025, 0.025, 0.02], height: [0.035, 0.05, 0.06, 0.05, 0.035], segments: 20,
     }), armor);
 
     // pauldrons: three overlapping plates, each lower and wider than the last
@@ -263,11 +265,11 @@ export class Avatar {
     }), skin, head);
     add(sweep([[0, -0.03, -0.02], [0, -0.045, -0.1]], { width: 0.04, height: 0.02 }), skin, head);
     add(sweep([[0, 0.035, 0.14], [0, 0.045, 0.04], [0, 0.03, -0.06], [0, 0.01, -0.12]], {
-      width: [0.05, 0.092, 0.088, 0.06], height: [0.05, 0.088, 0.082, 0.05], exp: 2.3, arc: [-0.04, 0.54], radial: 24,
+      width: [0.05, 0.092, 0.088, 0.06], height: [0.05, 0.088, 0.082, 0.05], exp: 2.3, arc: [-0.04, 0.54], radial: 16,
     }), armor, head);
     add(sweep([[-0.07, 0.03, -0.09], [0, 0.045, -0.125], [0.07, 0.03, -0.09]], { width: 0.014, height: 0.012 }), trim, head);
     add(sweep([[0, 0.075, -0.07], [0, 0.12, 0.0], [0, 0.165, 0.1], [0, 0.19, 0.22], [0, 0.2, 0.3]], {
-      width: [0.006, 0.01, 0.01, 0.007, 0.001], height: [0.012, 0.05, 0.055, 0.04, 0.004], segments: 32,
+      width: [0.006, 0.01, 0.01, 0.007, 0.001], height: [0.012, 0.05, 0.055, 0.04, 0.004], segments: 20,
     }), armor, head);
     for (const s of [-1, 1]) {
       add(sweep([[0.075 * s, 0.0, 0.0], [0.08 * s, -0.03, -0.07], [0.06 * s, -0.04, -0.12]], {

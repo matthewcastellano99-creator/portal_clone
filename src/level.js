@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Box } from './physics.js';
 import { chamberSignTexture } from './textures.js';
+import { mergeByMaterial } from './sculpt.js';
 
 const TEX_WORLD_SIZE = 4; // metres covered by one repeat of a surface texture
 
@@ -109,7 +110,10 @@ export function buildLevel(root, physics, materials, def, dust = 0) {
     return physics.addStatic(box);
   });
   for (const m of buildMeshes(boxes, materials)) root.add(m);
-  def.decor(root);
+  // the decoration never moves, so its parts are merged to save draw calls
+  const decor = new THREE.Group();
+  def.decor(decor);
+  root.add(mergeByMaterial(decor));
   if (dust > 0) dustMotes(root, boxes, dust);
 }
 
@@ -203,7 +207,7 @@ const lampMat = () => new THREE.MeshStandardMaterial({ color: 0x000000, emissive
 const darkMetal = () => new THREE.MeshStandardMaterial({ color: 0x1d1f22, roughness: 0.4, metalness: 0.7 });
 
 // Settings the game picks for the device: whether ceiling lamps cast real
-// light (each one is a point light, which costs every lit pixel).
+// light (a point light per row of lamps, which costs every lit pixel).
 export const levelOptions = { lampLights: true };
 
 // Rows of light panels just under a ceiling at height y.
@@ -222,11 +226,15 @@ export function lamps(root, xs, zs, y) {
       const beam = lightBeam(Math.min(7, y - 1), 3.4, 0.45, 1.9, beamMat);
       beam.position.set(x, y - 0.16, z);
       root.add(f, l, beam);
-      if (levelOptions.lampLights) {
-        const light = new THREE.PointLight(0xe8f0ff, 9, 16, 1.6);
-        light.position.set(x, y - 0.5, z);
-        root.add(light);
-      }
+    }
+  }
+  // one light per row of lamps keeps the per-pixel cost down
+  if (levelOptions.lampLights) {
+    const cx = xs.reduce((a, x) => a + x, 0) / xs.length;
+    for (const z of zs) {
+      const light = new THREE.PointLight(0xe8f0ff, 7 * xs.length, 18, 1.6);
+      light.position.set(cx, y - 0.5, z);
+      root.add(light);
     }
   }
 }

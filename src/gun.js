@@ -1,13 +1,15 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { PORTAL } from './config.js';
-import { sweep, armorBump, covenantBump, weaveBump, skinBump } from './sculpt.js';
+import { sweep, mergeByMaterial, armorBump, covenantBump, weaveBump, skinBump } from './sculpt.js';
 
 // Device models built in code. Both point down -z and return the same
 // parts: the group, the material that glows in the last portal's colour, and
 // the claws that open while holding something.
 export function buildGunModel(skin = 'subject') {
-  return skin === 'arbiter' ? buildPlasmaRifle() : buildPortalDevice();
+  const model = skin === 'arbiter' ? buildPlasmaRifle() : buildPortalDevice();
+  mergeByMaterial(model.group);
+  return model;
 }
 
 // A tool in the shape of a Covenant plasma rifle: a swept, glossy housing at
@@ -32,7 +34,7 @@ function buildPlasmaRifle() {
 
   // housing: fat in the middle, tapering to a rounded tail
   add(sweep([[0, -0.005, 0.22], [0, 0.008, 0.15], [0, 0.012, 0.06], [0, 0.01, -0.025]], {
-    width: [0.012, 0.05, 0.062, 0.058, 0.048], height: [0.012, 0.055, 0.068, 0.064, 0.05], exp: 2.3, segments: 32, radial: 28,
+    width: [0.012, 0.05, 0.062, 0.058, 0.048], height: [0.012, 0.055, 0.068, 0.064, 0.05], exp: 2.3, segments: 20, radial: 20,
   }), shell);
   // raised cheek plates on both sides
   for (const side of [0, 0.5]) {
@@ -53,7 +55,7 @@ function buildPlasmaRifle() {
     gun.add(hinge);
     const path = [[0, 0.01 * s, 0.03], [0, 0.04 * s, -0.04], [0, 0.045 * s, -0.12], [0, 0.022 * s, -0.19], [0, 0.0, -0.225]];
     add(sweep(path, {
-      width: [0.05, 0.05, 0.042, 0.026, 0.004], height: [0.036, 0.032, 0.026, 0.017, 0.003], exp: 2.2, segments: 32, radial: 24,
+      width: [0.05, 0.05, 0.042, 0.026, 0.004], height: [0.036, 0.032, 0.026, 0.017, 0.003], exp: 2.2, segments: 20, radial: 16,
     }), shell, hinge);
     // a glossy plate over the outer face, and a glowing strip on the inner face
     add(sweep(path.slice(0, 4), {
@@ -199,7 +201,7 @@ function buildPortalDevice() {
 
   // white shell: a rounded back swelling forward, then tapering to the collar
   add(sweep([[0, 0, 0.27], [0, 0, 0.22], [0, 0, 0.12], [0, 0, 0.0], [0, 0, -0.13]], {
-    width: [0.015, 0.068, 0.08, 0.072, 0.056], height: [0.015, 0.07, 0.08, 0.072, 0.056], segments: 32, radial: 32,
+    width: [0.015, 0.068, 0.08, 0.072, 0.056], height: [0.015, 0.07, 0.08, 0.072, 0.056], segments: 20, radial: 20,
   }), white);
   // grey panels inset along both sides
   for (const side of [0, 0.5]) {
@@ -208,8 +210,8 @@ function buildPortalDevice() {
     }), grey);
   }
   // collar, ribbed barrel and the emitter tip
-  add(sweep([[0, 0, -0.12], [0, 0, -0.16]], { width: [0.06, 0.056], segments: 2, radial: 28 }), dark);
-  add(sweep([[0, 0, -0.15], [0, 0, -0.29]], { width: [0.038, 0.03], segments: 2, radial: 24 }), black);
+  add(sweep([[0, 0, -0.12], [0, 0, -0.16]], { width: [0.06, 0.056], segments: 2, radial: 20 }), dark);
+  add(sweep([[0, 0, -0.15], [0, 0, -0.29]], { width: [0.038, 0.03], segments: 2, radial: 16 }), black);
   for (let i = 0; i < 4; i++) {
     const rib = add(new THREE.TorusGeometry(0.037 - i * 0.002, 0.005, 8, 24), dark);
     rib.position.z = -0.175 - i * 0.03;
@@ -285,7 +287,7 @@ export class ViewModel {
     const { group, coreMat, claws } = buildGunModel(skin);
     // The rifle is held turned in a little, so its side and prongs show.
     const arbiter = skin === 'arbiter';
-    if (arbiter) group.add(buildGauntlet());
+    if (arbiter) group.add(mergeByMaterial(buildGauntlet()));
     group.scale.setScalar(arbiter ? 0.85 : 1);
     this.base.set(arbiter ? 0.2 : 0.22, arbiter ? -0.16 : -0.22, arbiter ? -0.62 : -0.56);
     this.yaw = arbiter ? 0.42 : 0.06;

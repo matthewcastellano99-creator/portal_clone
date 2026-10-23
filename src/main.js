@@ -65,6 +65,11 @@ const GradeShader = {
 // Ambient occlusion that ignores see-through things (light shafts, glass,
 // particles), which would otherwise cast it as if they were solid.
 class AOPass extends GTAOPass {
+  // computed at half resolution, which the blur hides
+  setSize(w, h) {
+    super.setSize(Math.max(1, Math.round(w / 2)), Math.max(1, Math.round(h / 2)));
+  }
+
   _overrideVisibility() {
     super._overrideVisibility();
     const cache = this._visibilityCache;
@@ -94,8 +99,8 @@ const TOUCH = window.matchMedia('(pointer: coarse)').matches;
 
 // Phones and tablets get lighter settings; ?quality=high|mobile|low overrides.
 const PRESETS = {
-  high: { pixelRatio: RENDER.maxPixelRatio, recursion: 4, composerSamples: 4, portalSamples: 2, shadowMap: 4096, texture: 1024, ao: true, dust: 900, lampLights: true },
-  mobile: { pixelRatio: 1.25, recursion: 3, composerSamples: 4, portalSamples: 0, shadowMap: 2048, texture: 512, ao: false, dust: 350, lampLights: false },
+  high: { pixelRatio: RENDER.maxPixelRatio, recursion: 4, composerSamples: 4, portalSamples: 2, shadowMap: 2048, texture: 1024, ao: true, dust: 700, lampLights: true },
+  mobile: { pixelRatio: 1.25, recursion: 3, composerSamples: 4, portalSamples: 0, shadowMap: 1024, texture: 512, ao: false, dust: 200, lampLights: false },
   low: { pixelRatio: 1, recursion: 2, composerSamples: 0, portalSamples: 0, shadowMap: 1024, texture: 512, ao: false, dust: 0, lampLights: false },
 };
 const QUALITY = PRESETS[params.get('quality')] ?? (TOUCH ? PRESETS.mobile : PRESETS.high);
@@ -216,6 +221,7 @@ class Game {
       ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 12 });
       ao.blendIntensity = 0.9;
       this.composer.addPass(ao);
+      this.aoPass = ao;
     }
     this.skin = savedSkin();
     this.viewModel = new ViewModel(1, this.skin);
@@ -807,6 +813,9 @@ class Game {
       } else if (cur * 0.85 >= s.floor) {
         next = cur * 0.85;
         s.lowered = true;
+      } else if (this.aoPass?.enabled) {
+        // Already at the lowest resolution: drop the ambient occlusion.
+        this.aoPass.enabled = false;
       }
     } else {
       s.lowered = false;

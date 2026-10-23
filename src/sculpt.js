@@ -32,7 +32,7 @@ function sampler(v) {
 export function sweep(points, opts = {}) {
   const {
     width = 0.05, height = width, exp = 2, lift = 0,
-    segments = 24, radial = 20, arc = [0, 1], caps = true, up = [0, 1, 0],
+    segments = 14, radial = 14, arc = [0, 1], caps = true, up = [0, 1, 0],
   } = opts;
   const curve = new THREE.CatmullRomCurve3(points.map((p) => new THREE.Vector3(...p)), false, 'centripetal');
   const W = sampler(width), H = sampler(height), E = sampler(exp), L = sampler(lift);
@@ -286,4 +286,75 @@ export function skinBump(repeat) {
       g.fillRect(x - r, y - r, r * 2, r * 2);
     }
   }, repeat);
+}
+
+// ------------------------------------------------------------ merging
+
+// Combine the meshes directly inside `group` that share a material into one
+// mesh each, then do the same inside every child group. A model built from
+// dozens of parts then costs a handful of draw calls per view, which matters
+// because the player is drawn again in every portal view and the shadow map.
+// Groups (joints that move) are kept; meshes with children are left alone.
+export function mergeByMaterial(group) {
+  const byMat = new Map();
+  for (const child of [...group.children]) {
+    if (child.isMesh && child.children.length === 0 && !child.isSkinnedMesh) {
+      if (!byMat.has(child.material)) byMat.set(child.material, []);
+      byMat.get(child.material).push(child);
+    } else {
+      mergeByMaterial(child);
+    }
+  }
+  for (const [material, meshes] of byMat) {
+    if (meshes.length < 2) continue;
+    const pos = [], nor = [], uv = [], index = [];
+    const v = new THREE.Vector3();
+    const nm = new THREE.Matrix3();
+    let renderOrder = 0, cast = false, receive = false;
+    for (const m of meshes) {
+      m.updateMatrix();
+      nm.getNormalMatrix(m.matrix);
+      const g = m.geometry;
+      const P = g.attributes.position, N = g.attributes.normal, U = g.attributes.uv;
+      const base = pos.length / 3;
+      for (let i = 0; i < P.count; i++) {
+        v.fromBufferAttribute(P, i).applyMatrix4(m.matrix);
+        pos.push(v.x, v.y, v.z);
+        v.fromBufferAttribute(N, i).applyMatrix3(nm).normalize();
+        nor.push(v.x, v.y, v.z);
+        uv.push(U ? U.getX(i) : 0, U ? U.getY(i) : 0);
+      }
+      // a mirrored part (negative scale) needs its triangles turned round
+      const flip = m.matrix.determinant() < 0;
+      if (g.index) {
+        const I = g.index.array;
+        for (let i = 0; i < I.length; i += 3) {
+          if (flip) index.push(base + I[i], base + I[i + 2], base + I[i + 1]);
+          else index.push(base + I[i], base + I[i + 1], base + I[i + 2]);
+        }
+      } else {
+        for (let i = 0; i < P.count; i += 3) {
+          if (flip) index.push(base + i, base + i + 2, base + i + 1);
+          else index.push(base + i, base + i + 1, base + i + 2);
+        }
+      }
+      renderOrder = Math.max(renderOrder, m.renderOrder);
+      cast ||= m.castShadow;
+      receive ||= m.receiveShadow;
+      group.remove(m);
+      g.dispose();
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    geo.setIndex(index);
+    geo.computeBoundingSphere();
+    const merged = new THREE.Mesh(geo, material);
+    merged.renderOrder = renderOrder;
+    merged.castShadow = cast;
+    merged.receiveShadow = receive;
+    group.add(merged);
+  }
+  return group;
 }
