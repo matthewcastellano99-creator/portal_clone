@@ -232,62 +232,6 @@ export function armorBump(repeat) {
   }, repeat);
 }
 
-// Flowing, organic seams in the style of Covenant hardware.
-export function covenantBump(repeat) {
-  return canvasTexture('covenant', 512, 256, (g, w, h) => {
-    g.fillStyle = '#808080';
-    g.fillRect(0, 0, w, h);
-    grain(g, w, h, 1500, 0.03);
-    for (const y of [64, 192]) {
-      groove(g, () => {
-        g.moveTo(0, y);
-        g.bezierCurveTo(w * 0.3, y - 24, w * 0.6, y + 24, w, y);
-      }, 4);
-    }
-    for (const [x, y] of [[90, 128], [260, 128], [410, 128], [170, 10], [340, 246]]) {
-      groove(g, () => {
-        g.ellipse(x, y, 34, 22, 0, 0, Math.PI * 2);
-      }, 3);
-      groove(g, () => {
-        g.moveTo(x + 34, y);
-        g.quadraticCurveTo(x + 70, y - 30, x + 90, y - 4);
-      }, 2);
-    }
-  }, repeat);
-}
-
-// A fine woven undersuit.
-export function weaveBump(repeat) {
-  return canvasTexture('weave', 128, 128, (g, w, h) => {
-    g.fillStyle = '#808080';
-    g.fillRect(0, 0, w, h);
-    for (let y = 0; y < h; y += 4) {
-      for (let x = 0; x < w; x += 4) {
-        const v = ((x + y) / 4) % 2 ? 150 : 100;
-        g.fillStyle = `rgb(${v},${v},${v})`;
-        g.fillRect(x, y, 4, 2);
-      }
-    }
-    grain(g, w, h, 800, 0.1);
-  }, repeat);
-}
-
-// Pebbled reptilian skin.
-export function skinBump(repeat) {
-  return canvasTexture('skin', 256, 256, (g, w, h) => {
-    g.fillStyle = '#707070';
-    g.fillRect(0, 0, w, h);
-    for (let i = 0; i < 900; i++) {
-      const x = Math.random() * w, y = Math.random() * h, r = 2 + Math.random() * 5;
-      const grad = g.createRadialGradient(x, y, 0, x, y, r);
-      grad.addColorStop(0, 'rgba(200,200,200,0.8)');
-      grad.addColorStop(1, 'rgba(112,112,112,0)');
-      g.fillStyle = grad;
-      g.fillRect(x - r, y - r, r * 2, r * 2);
-    }
-  }, repeat);
-}
-
 // ------------------------------------------------------------ merging
 
 // Combine the meshes directly inside `group` that share a material into one

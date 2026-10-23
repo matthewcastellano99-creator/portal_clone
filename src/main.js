@@ -121,7 +121,6 @@ class Game {
       completeChoose: document.getElementById('complete-choose'),
       restartChamber: document.getElementById('restart-chamber'),
       chambers: document.getElementById('chambers'),
-      skins: document.querySelectorAll('[data-skin]'),
       views: document.querySelectorAll('[data-view]'),
       help: document.getElementById('help'),
       hint: document.getElementById('hint'),
@@ -223,8 +222,7 @@ class Game {
       this.composer.addPass(ao);
       this.aoPass = ao;
     }
-    this.skin = savedSkin();
-    this.viewModel = new ViewModel(1, this.skin);
+    this.viewModel = new ViewModel(1);
     // reflections for the glossy device
     this.viewModel.scene.environment = scene.environment;
     this.viewModel.scene.environmentIntensity = 0.4;
@@ -250,8 +248,8 @@ class Game {
     this.portalRenderer = new PortalRenderer(this.renderer, scene, this.portals.portals, { samples: QUALITY.portalSamples, type: this.targetType });
 
     this.player = new Player();
-    this.avatar = new Avatar(scene, [1], this.skin);
-    this.avatarClone = new Avatar(scene, [0, 1], this.skin);
+    this.avatar = new Avatar(scene, [1]);
+    this.avatarClone = new Avatar(scene, [0, 1]);
     this.avatarClone.root.matrixAutoUpdate = false;
     this.thirdPerson = new ThirdPersonCamera();
     // Physics runs in fixed steps; the player and cube are drawn blended
@@ -292,10 +290,6 @@ class Game {
       const tile = e.target.closest('[data-chamber]');
       if (tile) this.selectChamber(Number(tile.dataset.chamber));
     });
-    for (const button of this.ui.skins) {
-      button.addEventListener('click', () => this.setSkin(button.dataset.skin));
-    }
-    this.showSkin();
     for (const button of this.ui.views) {
       button.addEventListener('click', () => this.setView(button.dataset.view));
     }
@@ -456,26 +450,6 @@ class Game {
     this.ui.help.hidden = open;
     this.ui.chooseChamber.setAttribute('aria-expanded', String(open));
     this.ui.chooseChamber.textContent = open ? 'Hide levels' : 'Select level';
-  }
-
-  // The look of the player's body and device; remembered on this device.
-  setSkin(skin) {
-    if (skin === this.skin) return;
-    this.skin = skin;
-    this.viewModel.setSkin(skin);
-    this.avatar.setSkin(skin);
-    this.avatarClone.setSkin(skin);
-    this.dirty = true;
-    this.showSkin();
-    try {
-      localStorage.setItem(SKIN_KEY, skin);
-    } catch {
-      // not remembered
-    }
-  }
-
-  showSkin() {
-    for (const button of this.ui.skins) button.setAttribute('aria-pressed', String(button.dataset.skin === this.skin));
   }
 
   // First person, or the over-the-shoulder camera with the player's body in
@@ -1287,18 +1261,6 @@ function savedView() {
     // storage unavailable
   }
   return 'third';
-}
-
-const SKIN_KEY = 'portal-clone:skin';
-const SKINS = ['subject', 'arbiter'];
-function savedSkin() {
-  try {
-    const skin = localStorage.getItem(SKIN_KEY);
-    if (SKINS.includes(skin)) return skin;
-  } catch {
-    // storage unavailable
-  }
-  return 'subject';
 }
 
 // Free the GPU resources of a level that is being replaced, keeping the

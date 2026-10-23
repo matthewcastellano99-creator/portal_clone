@@ -285,7 +285,7 @@ button.secondary:hover {
   margin-top: 18px;
 }
 
-/* skin picker: two toggle buttons */
+/* view picker: two toggle buttons */
 .skins {
   display: flex;
   align-items: center;
