@@ -365,7 +365,7 @@ class Game {
     this.ui.chambers.hidden = !open;
     this.ui.help.hidden = open;
     this.ui.chooseChamber.setAttribute('aria-expanded', String(open));
-    this.ui.chooseChamber.textContent = open ? 'Hide chambers' : 'Select chamber';
+    this.ui.chooseChamber.textContent = open ? 'Hide levels' : 'Select level';
   }
 
   selectChamber(index) {
@@ -952,7 +952,7 @@ class Game {
     this.sfx.complete();
     const t = this.state.time;
     const mm = Math.floor(t / 60), ss = Math.floor(t % 60).toString().padStart(2, '0');
-    this.ui.stats.textContent = `${LEVELS.length} chambers  ·  Time ${mm}:${ss}  ·  Portals fired ${this.state.portalsFired}`;
+    this.ui.stats.textContent = `${LEVELS.length} levels  ·  Time ${mm}:${ss}  ·  Portals fired ${this.state.portalsFired}`;
     this.ui.complete.classList.remove('hidden');
     document.exitPointerLock?.();
   }
@@ -1098,7 +1098,7 @@ class Game {
 }
 
 const pad2 = (n) => String(n).padStart(2, '0');
-const chamberName = (def) => `Test Chamber ${pad2(def.number)}`;
+const chamberName = (def) => `Level ${pad2(def.number)}`;
 
 // Which chambers this device has finished. Storage can be unavailable
 // (private windows, embedded views), in which case nothing is remembered.

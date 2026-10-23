@@ -388,4 +388,4 @@ if (failed.length || errors.length) {
   console.error(`FAILED: ${[...failed, ...(errors.length ? ['page errors'] : [])].join(', ')}`);
   process.exit(1);
 }
-console.log('All test chambers solved.');
+console.log('All levels solved.');

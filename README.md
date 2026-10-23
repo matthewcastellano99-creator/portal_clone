@@ -2,15 +2,15 @@
 
 A small first-person puzzle game for the browser, inspired by Valve's *Portal*. You carry a device that fires two linked portals, and you use them to get a weighted cube onto a button to open the exit.
 
-There are three test chambers, joined by elevator rides:
+There are three levels, joined by elevator rides:
 
-- **Test Chamber 01:** the basics. The cube is up on a ledge and the button is up on a platform; portals only stick to white panels.
-- **Test Chamber 02:** moving things with gravity. The cube sits at the bottom of a pit you can't reach, and the button is in an alcove you can't climb into. Whatever falls into one portal falls out of the other.
-- **Test Chamber 03:** the fling. A chasm separates you from the button, and nothing on the far side holds a portal. Fall far enough into one portal and you come flying out of the other. The cube has to make the trip too.
+- **Level 01:** the basics. The cube is up on a ledge and the button is up on a platform; portals only stick to white panels.
+- **Level 02:** moving things with gravity. The cube sits at the bottom of a pit you can't reach, and the button is in an alcove you can't climb into. Whatever falls into one portal falls out of the other.
+- **Level 03:** the fling. A chasm separates you from the button, and nothing on the far side holds a portal. Fall far enough into one portal and you come flying out of the other. The cube has to make the trip too.
 
-Pick any chamber from **Select chamber** on the start or pause menu. Chambers you've finished are ticked (remembered in this browser). The pause menu also has **Restart chamber**.
+Pick any level from **Select level** on the start or pause menu. Levels you've finished are ticked (remembered in this browser). The pause menu also has **Restart level**.
 
-When the exit door opens, step into the glass elevator. It closes, rides up its shaft as the screen fades, shows the next chamber's card, and brings you down into the next chamber.
+When the exit door opens, step into the glass elevator. It closes, rides up its shaft as the screen fades, shows the next level's card, and brings you down into the next level.
 
 **Play:** https://matthewcastellano99-creator.github.io/portal_clone/
 
@@ -39,7 +39,7 @@ With a mouse and keyboard:
 | Left click | Fire blue portal |
 | Right click | Fire orange portal |
 | E (or F) | Pick up / drop the cube |
-| R | Restart the chamber |
+| R | Restart the level |
 | Esc | Pause |
 
 If the browser won't lock the mouse pointer (some embedded views), drag to look and click without dragging to fire.
@@ -51,7 +51,7 @@ Portals only stick to the **white panels**. Dark metal, the door and the cube st
 - See-through portals with recursive views (a portal can show itself inside itself).
 - Momentum is kept through portals, so falling into a floor portal flings you out of a wall portal. Fast exits come out straight along the portal, and a falling body that's roughly over a floor portal is steered into it, so flings are predictable.
 - Carry the cube through portals, or grab it through one. Portal shots pass through the cube, so aiming at it puts a portal under it.
-- Elevator transitions between chambers, with a chamber card while the next one loads.
+- Elevator transitions between levels, with a level card while the next one loads.
 - Floor button, sliding exit door and indicator lights.
 - You can see your own body through portals, and it casts a shadow.
 - Everything is generated in code: textures, models and sound effects. There are no asset files.
@@ -82,7 +82,7 @@ git push origin main:gh-pages
 
 ## Tests
 
-`tests/playthrough.mjs` loads the game in headless Chromium and plays both chambers through the game's own simulation. It places portals, walks through them, carries the cube, rides the elevator to Chamber 02, drops the cube out of the pit and onto the alcove button, and finishes. It then throws the player and the cube through randomly placed portals in both chambers and fails if anything ends up stuck inside geometry. It also fails on any page error.
+`tests/playthrough.mjs` loads the game in headless Chromium and plays both levels through the game's own simulation. It places portals, walks through them, carries the cube, rides the elevator to Level 02, drops the cube out of the pit and onto the alcove button, and finishes. It then throws the player and the cube through randomly placed portals in both levels and fails if anything ends up stuck inside geometry. It also fails on any page error.
 
 ```sh
 npm install
@@ -96,8 +96,8 @@ npm test
 | --- | --- |
 | `src/main.js` | Game setup, quality presets, fixed-step loop, input, cube carrying, UI |
 | `src/touch.js` | On-screen touch controls |
-| `src/levels.js` | The chamber layouts (axis-aligned boxes), their elevators, signs and lines |
-| `src/level.js` | Builds a chamber's geometry from boxes, plus shared decoration (lamps, signs, windows) |
+| `src/levels.js` | The level layouts (axis-aligned boxes), their elevators, signs and lines |
+| `src/level.js` | Builds a level's geometry from boxes, plus shared decoration (lamps, signs, windows) |
 | `src/physics.js` | Box-vs-box collision, portal-aware collision and raycasts |
 | `src/portals.js` | Portal placement and fitting, portal surface shader, teleporting |
 | `src/portalRenderer.js` | Renders the view through each portal, with recursion |

@@ -297,7 +297,7 @@ export function chamberSignTexture({ number, total, lit, lines }) {
   ctx.fillStyle = '#2b2b2b';
   ctx.fillRect(30, 460, w - 60, 4);
   ctx.font = '600 30px "Helvetica Neue", Arial, sans-serif';
-  ctx.fillText('TEST CHAMBER', 36, 480);
+  ctx.fillText('LEVEL', 36, 480);
   // pictograms: cube drop, cube on button, portal
   const icon = (x, y, draw, on) => {
     ctx.fillStyle = on ? '#2b2b2b' : '#c9c7c0';

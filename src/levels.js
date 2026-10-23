@@ -1,6 +1,6 @@
 import { b, slab, lamps, stripLight, observationWindow, chamberSign, dispenser } from './level.js';
 
-// Chamber layouts. Every level has one weighted cube, one floor button and
+// Level layouts. Every level has one weighted cube, one floor button and
 // one exit door the button opens. Elevators carry the player between levels:
 // `arrival` is where the previous chamber's elevator delivers them (the first
 // level uses `spawn` instead) and `exit` is the elevator out. Elevator
@@ -10,7 +10,7 @@ import { b, slab, lamps, stripLight, observationWindow, chamberSign, dispenser }
 const TOTAL = 3;
 const DOOR_OPEN_LINE = 'The exit is open. Step into the elevator.';
 
-// Test Chamber 01
+// Level 01
 //
 // The main room spans x -9..9, z -11..11 and is 10 m tall. The cube sits on a
 // 4 m high ledge against the east wall. The button and the exit door are on a
@@ -19,7 +19,7 @@ const DOOR_OPEN_LINE = 'The exit is open. Step into the elevator.';
 // the ledge, the north wall above the platform, and a patch of floor.
 const chamber01 = {
   number: 1,
-  intro: 'Test Chamber 01. Bring the Weighted Cube to the button to open the exit.',
+  intro: 'Level 01. Bring the Weighted Cube to the button to open the exit.',
   doorOpen: DOOR_OPEN_LINE,
   card: ['Bring the cube to the button.', 'Some surfaces will not hold a portal.'],
   spawn: { pos: [0, 0, 8.5], yaw: 0 }, // feet position; yaw 0 faces -z (north)
@@ -84,7 +84,7 @@ const chamber01 = {
   },
 };
 
-// Test Chamber 02
+// Level 02
 //
 // The cube sits at the bottom of a 3 m deep pit with a white floor, out of
 // reach: a portal under it drops it through. The button is in a raised alcove
@@ -95,7 +95,7 @@ const chamber01 = {
 // pit can always portal out.
 const chamber02 = {
   number: 2,
-  intro: 'Test Chamber 02. What falls into one portal falls out of the other.',
+  intro: 'Level 02. What falls into one portal falls out of the other.',
   doorOpen: DOOR_OPEN_LINE,
   card: ['Portals can move what you cannot reach.', 'Momentum carries through.'],
   arrival: { pos: [0, 0, 14.2], yaw: Math.PI },
@@ -168,7 +168,7 @@ const chamber02 = {
   },
 };
 
-// Test Chamber 03
+// Level 03
 //
 // A 6 m wide chasm separates the start side (south) from the goal side
 // (north), and the goal side has no white surface that can be seen from the
@@ -181,7 +181,7 @@ const chamber02 = {
 // white wall at its bottom so a fall into it isn't a dead end.
 const chamber03 = {
   number: 3,
-  intro: 'Test Chamber 03. A body in motion stays in motion, even through a portal.',
+  intro: 'Level 03. A body in motion stays in motion, even through a portal.',
   doorOpen: DOOR_OPEN_LINE,
   card: ['Fall far, fly far.', 'Bring the cube across the gap.'],
   arrival: { pos: [0, 0, 12.6], yaw: Math.PI },
