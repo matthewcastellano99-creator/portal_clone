@@ -60,7 +60,7 @@ Portals only stick to the **white panels**. Dark metal, the door and the cube st
 - Floor button, sliding exit door and indicator lights.
 - Third-person camera that collides with walls and passes through portals, or classic first person.
 - Two sculpted player skins with a walk cycle: a test subject with long-fall boots, and the Arbiter with a plasma-rifle portal device.
-- Ceiling lamps that light the room, shafts of light under them, drifting dust, haze, ambient occlusion (desktop) and a final colour grade.
+- Ceiling lamps that light the room, drifting dust, haze, ambient occlusion (desktop) and a final colour grade.
 - Everything is generated in code: textures, models, sound effects and the ambient music. There are no asset files.
 
 ## Running locally
