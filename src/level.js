@@ -102,7 +102,7 @@ function buildMeshes(boxes, materials) {
   return meshes;
 }
 
-export function buildLevel(root, physics, materials, def) {
+export function buildLevel(root, physics, materials, def, dust = 0) {
   const boxes = def.boxes.map((d) => {
     const box = new Box(d.min, d.max, d);
     box.hidden = !!d.hidden;
@@ -110,6 +110,91 @@ export function buildLevel(root, physics, materials, def) {
   });
   for (const m of buildMeshes(boxes, materials)) root.add(m);
   def.decor(root);
+  if (dust > 0) dustMotes(root, boxes, dust);
+}
+
+// ------------------------------------------------------------ atmosphere
+
+// Seconds since the game started; drives the drifting dust and the shimmer
+// in the light shafts.
+export const atmosphereTime = { value: 0 };
+
+// Specks of dust drifting slowly through the air, catching the light.
+function dustMotes(root, boxes, count) {
+  const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+  for (const b of boxes) {
+    for (let a = 0; a < 3; a++) {
+      lo[a] = Math.min(lo[a], b.min[a]);
+      hi[a] = Math.max(hi[a], b.max[a]);
+    }
+  }
+  const pos = new Float32Array(count * 3);
+  const seed = new Float32Array(count);
+  for (let i = 0; i < count; i++) {
+    for (let a = 0; a < 3; a++) pos[i * 3 + a] = lo[a] + Math.random() * (hi[a] - lo[a]);
+    seed[i] = Math.random() * 100;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('seed', new THREE.BufferAttribute(seed, 1));
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { time: atmosphereTime, pixelRatio: { value: Math.min(window.devicePixelRatio, 2) } },
+    vertexShader: `attribute float seed; uniform float time; uniform float pixelRatio; varying float vFade;
+      void main() {
+        vec3 p = position + vec3(sin(time * 0.11 + seed) * 0.6, sin(time * 0.07 + seed * 1.7) * 0.4, cos(time * 0.09 + seed * 1.3) * 0.6);
+        vec4 mv = modelViewMatrix * vec4(p, 1.0);
+        gl_Position = projectionMatrix * mv;
+        float d = -mv.z;
+        vFade = smoothstep(0.3, 1.5, d) * (1.0 - smoothstep(10.0, 24.0, d)) * (0.55 + 0.45 * sin(time * 0.8 + seed * 5.0));
+        gl_PointSize = pixelRatio * (16.0 + fract(seed) * 14.0) / d;
+      }`,
+    fragmentShader: `varying float vFade;
+      void main() {
+        float r = length(gl_PointCoord - 0.5);
+        float a = smoothstep(0.5, 0.0, r) * vFade * 0.5;
+        gl_FragColor = vec4(vec3(1.0, 0.96, 0.9) * a, a);
+      }`,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+  const points = new THREE.Points(geo, mat);
+  points.frustumCulled = false;
+  root.add(points);
+}
+
+// A soft shaft of light falling from a ceiling lamp: a widening, open-ended
+// box that fades towards the floor and at its edges.
+const beamMaterial = () => new THREE.ShaderMaterial({
+  uniforms: { time: atmosphereTime },
+  vertexShader: `varying float vY; varying vec3 vN; varying vec3 vView;
+    void main() {
+      vY = uv.y;
+      vec4 mv = modelViewMatrix * vec4(position, 1.0);
+      vN = normalize(normalMatrix * normal);
+      vView = normalize(-mv.xyz);
+      gl_Position = projectionMatrix * mv;
+    }`,
+  fragmentShader: `uniform float time; varying float vY; varying vec3 vN; varying vec3 vView;
+    void main() {
+      float edge = pow(abs(dot(vN, vView)), 1.6);
+      float a = edge * pow(vY, 1.8) * (0.11 + 0.012 * sin(time * 0.6));
+      gl_FragColor = vec4(vec3(0.92, 0.96, 1.0) * a, a);
+    }`,
+  transparent: true,
+  depthWrite: false,
+  side: THREE.DoubleSide,
+  blending: THREE.AdditiveBlending,
+});
+
+function lightBeam(length, width, depth, spread, material) {
+  const geo = new THREE.CylinderGeometry(Math.SQRT1_2, Math.SQRT1_2 * spread, length, 4, 1, true);
+  geo.rotateY(Math.PI / 4);
+  geo.scale(width, 1, depth);
+  geo.translate(0, -length / 2, 0);
+  const m = new THREE.Mesh(geo, material);
+  m.renderOrder = 2;
+  return m;
 }
 
 // ------------------------------------------------------------ decoration
@@ -117,11 +202,16 @@ export function buildLevel(root, physics, materials, def) {
 const lampMat = () => new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xf4f8ff, emissiveIntensity: 2.4 });
 const darkMetal = () => new THREE.MeshStandardMaterial({ color: 0x1d1f22, roughness: 0.4, metalness: 0.7 });
 
+// Settings the game picks for the device: whether ceiling lamps cast real
+// light (each one is a point light, which costs every lit pixel).
+export const levelOptions = { lampLights: true };
+
 // Rows of light panels just under a ceiling at height y.
 export function lamps(root, xs, zs, y) {
   const lamp = lampMat();
   const frame = new THREE.MeshStandardMaterial({ color: 0x2a2d31, roughness: 0.5, metalness: 0.6 });
   const lampGeo = new THREE.BoxGeometry(3.4, 0.08, 0.45);
+  const beamMat = beamMaterial();
   const frameGeo = new THREE.BoxGeometry(3.7, 0.12, 0.7);
   for (const x of xs) {
     for (const z of zs) {
@@ -129,7 +219,14 @@ export function lamps(root, xs, zs, y) {
       f.position.set(x, y - 0.06, z);
       const l = new THREE.Mesh(lampGeo, lamp);
       l.position.set(x, y - 0.12, z);
-      root.add(f, l);
+      const beam = lightBeam(Math.min(7, y - 1), 3.4, 0.45, 1.9, beamMat);
+      beam.position.set(x, y - 0.16, z);
+      root.add(f, l, beam);
+      if (levelOptions.lampLights) {
+        const light = new THREE.PointLight(0xe8f0ff, 9, 16, 1.6);
+        light.position.set(x, y - 0.5, z);
+        root.add(light);
+      }
     }
   }
 }

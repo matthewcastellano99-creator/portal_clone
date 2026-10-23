@@ -10,6 +10,8 @@ There are three levels, joined by elevator rides:
 
 Pick any level from **Select level** on the start or pause menu. Levels you've finished are ticked (remembered in this browser). The pause menu also has **Restart level**.
 
+The game plays in **third person** by default, with an over-the-shoulder camera that slides in when a wall is behind you and looks through a portal when you stand in front of one. **View** on the menu (or **V**) switches to first person.
+
 **Skin** on the same menu switches between the orange-suited test subject with the portal device, and an Arbiter-style Sangheili in silver armour carrying a portal tool shaped like a plasma rifle. Your pick is remembered in this browser.
 
 When the exit door opens, step into the glass elevator. It closes, rides up its shaft as the screen fades, shows the next level's card, and brings you down into the next level.
@@ -42,6 +44,7 @@ With a mouse and keyboard:
 | Right click | Fire orange portal |
 | E (or F) | Pick up / drop the cube |
 | R | Restart the level |
+| V | Switch between third and first person |
 | Esc | Pause |
 
 If the browser won't lock the mouse pointer (some embedded views), drag to look and click without dragging to fire.
@@ -55,7 +58,9 @@ Portals only stick to the **white panels**. Dark metal, the door and the cube st
 - Carry the cube through portals, or grab it through one. Portal shots pass through the cube, so aiming at it puts a portal under it.
 - Elevator transitions between levels, with a level card while the next one loads.
 - Floor button, sliding exit door and indicator lights.
-- You can see your own body through portals, and it casts a shadow.
+- Third-person camera that collides with walls and passes through portals, or classic first person.
+- Two sculpted player skins with a walk cycle: a test subject with long-fall boots, and the Arbiter with a plasma-rifle portal device.
+- Ceiling lamps that light the room, shafts of light under them, drifting dust, haze, ambient occlusion (desktop) and a final colour grade.
 - Everything is generated in code: textures, models, sound effects and the ambient music. There are no asset files.
 
 ## Running locally
@@ -105,7 +110,9 @@ npm test
 | `src/portalRenderer.js` | Renders the view through each portal, with recursion |
 | `src/player.js` | First-person movement (Source-style acceleration and friction) |
 | `src/cube.js`, `src/entities.js` | Weighted cube, floor button, door, indicator lights, elevators |
-| `src/gun.js`, `src/avatar.js` | First-person device and the third-person body, for each skin |
+| `src/gun.js`, `src/avatar.js` | The device and the player's body, for each skin |
+| `src/sculpt.js` | Swept-surface modelling and procedural bump textures for the skins |
+| `src/thirdPerson.js` | Over-the-shoulder camera boom |
 | `src/textures.js`, `src/materials.js` | Procedural panel, metal and floor textures |
 | `src/audio.js` | Synthesised sound effects and generative ambient music (WebAudio) |
 
@@ -117,4 +124,4 @@ npm test
 
 ## Credits
 
-A fan-made tribute that isn't affiliated with or endorsed by Valve. *Portal* is a trademark of Valve Corporation. Built with [three.js](https://threejs.org) (MIT, vendored in `vendor/three`).
+A fan-made tribute that isn't affiliated with or endorsed by Valve. *Portal* is a trademark of Valve Corporation; *Halo* and the Arbiter belong to Microsoft. Built with [three.js](https://threejs.org) r185 (MIT, vendored in `vendor/three`, including its GTAO ambient-occlusion pass).

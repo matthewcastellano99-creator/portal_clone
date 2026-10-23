@@ -31,6 +31,8 @@ page.on('pageerror', (e) => errors.push(e.message));
 page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
 await page.goto(url);
 await page.waitForFunction(() => window.__game, null, { timeout: 30000 });
+// The scripted routes aim from the eye, so play them in first person.
+await page.evaluate(() => window.__game.setView('first'));
 
 const result = await page.evaluate(() => {
   const g = window.__game;
@@ -390,6 +392,32 @@ const walkIn = await page.evaluate(() => {
 result.platformPortalsWalkable = walkIn.through === walkIn.tries;
 result.stepsOverSmallLip = walkIn.smallLip && !walkIn.bigLip;
 console.log(`Platform walk-in: ${walkIn.through}/${walkIn.tries} went through`);
+
+// Third person: from many spots and view directions, the camera never ends up
+// inside solid geometry, and a shot from the shoulder lands where the
+// crosshair points (straight down the middle of the screen).
+result.thirdPersonCamera = await page.evaluate(() => {
+  const g = window.__game;
+  g.newGame();
+  g.setView('third');
+  const inside = (p) => g.physics.statics.some((b) => !b.hidden &&
+    p.x > b.min[0] + 0.02 && p.x < b.max[0] - 0.02 && p.y > b.min[1] + 0.02 && p.y < b.max[1] - 0.02 && p.z > b.min[2] + 0.02 && p.z < b.max[2] - 0.02);
+  let seed = 3;
+  const rnd = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296;
+  let ok = true;
+  for (let i = 0; i < 300 && ok; i++) {
+    g.player.yaw = rnd() * Math.PI * 2;
+    g.player.pitch = (rnd() - 0.5) * 2.6;
+    g.step(0.3, { forward: rnd() < 0.7 ? 1 : 0, strafe: Math.round(rnd() * 2 - 1), jump: false });
+    g.thirdPerson.reset();
+    g.frameUpdate(1 / 60);
+    if (inside(g.camera.position) || inside(g.thirdPerson.pivot)) ok = false;
+  }
+  const center = g.camera.getWorldDirection(new g.camera.position.constructor());
+  const aim = g.player.forward();
+  g.setView('first');
+  return ok && center.angleTo(aim) < 1e-3;
+});
 
 await browser.close();
 server.close();

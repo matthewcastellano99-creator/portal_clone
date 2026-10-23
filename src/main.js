@@ -3,6 +3,8 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { Pass } from 'three/addons/postprocessing/Pass.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
@@ -11,7 +13,7 @@ import { PhysicsWorld } from './physics.js';
 import { PortalSystem, teleportBody } from './portals.js';
 import { PortalRenderer } from './portalRenderer.js';
 import { createMaterials } from './materials.js';
-import { buildLevel } from './level.js';
+import { buildLevel, atmosphereTime, levelOptions } from './level.js';
 import { LEVELS } from './levels.js';
 import { Player } from './player.js';
 import { WeightedCube } from './cube.js';
@@ -21,6 +23,7 @@ import { Avatar } from './avatar.js';
 import { Effects } from './effects.js';
 import { Sfx } from './audio.js';
 import { TouchControls } from './touch.js';
+import { ThirdPersonCamera } from './thirdPerson.js';
 
 // Draws a second scene (the first-person gun) over the main image.
 class OverlayPass extends Pass {
@@ -41,17 +44,51 @@ class OverlayPass extends Pass {
   }
 }
 
+// Final look: a touch of contrast, cool shadows, warm highlights and a soft
+// vignette. Works on the display-ready image.
+const GradeShader = {
+  uniforms: { tDiffuse: { value: null } },
+  vertexShader: `varying vec2 vUv;
+    void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: `uniform sampler2D tDiffuse; varying vec2 vUv;
+    void main() {
+      vec3 c = texture2D(tDiffuse, vUv).rgb;
+      c = mix(c, c * c * (3.0 - 2.0 * c), 0.25);
+      float l = dot(c, vec3(0.299, 0.587, 0.114));
+      c += mix(vec3(-0.008, 0.0, 0.018), vec3(0.014, 0.006, -0.012), smoothstep(0.1, 0.8, l));
+      vec2 d = vUv - 0.5;
+      c *= mix(1.0, 0.72, smoothstep(0.35, 0.95, length(d * vec2(1.25, 1.0))));
+      gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
+    }`,
+};
+
+// Ambient occlusion that ignores see-through things (light shafts, glass,
+// particles), which would otherwise cast it as if they were solid.
+class AOPass extends GTAOPass {
+  _overrideVisibility() {
+    super._overrideVisibility();
+    const cache = this._visibilityCache;
+    this.scene.traverse((o) => {
+      if (o.visible && o.isMesh && [].concat(o.material).some((m) => m.transparent)) {
+        o.visible = false;
+        cache.push(o);
+      }
+    });
+  }
+}
+
 const params = new URLSearchParams(location.search);
 const TOUCH = window.matchMedia('(pointer: coarse)').matches;
 
 // Phones and tablets get lighter settings; ?quality=high|mobile|low overrides.
 const PRESETS = {
-  high: { pixelRatio: RENDER.maxPixelRatio, recursion: 4, composerSamples: 4, portalSamples: 2, shadowMap: 2048, texture: 1024 },
-  mobile: { pixelRatio: 1.25, recursion: 3, composerSamples: 4, portalSamples: 0, shadowMap: 1024, texture: 512 },
-  low: { pixelRatio: 1, recursion: 2, composerSamples: 0, portalSamples: 0, shadowMap: 1024, texture: 512 },
+  high: { pixelRatio: RENDER.maxPixelRatio, recursion: 4, composerSamples: 4, portalSamples: 2, shadowMap: 4096, texture: 1024, ao: true, dust: 900, lampLights: true },
+  mobile: { pixelRatio: 1.25, recursion: 3, composerSamples: 4, portalSamples: 0, shadowMap: 2048, texture: 512, ao: false, dust: 350, lampLights: false },
+  low: { pixelRatio: 1, recursion: 2, composerSamples: 0, portalSamples: 0, shadowMap: 1024, texture: 512, ao: false, dust: 0, lampLights: false },
 };
 const QUALITY = PRESETS[params.get('quality')] ?? (TOUCH ? PRESETS.mobile : PRESETS.high);
 PORTAL.maxRecursion = QUALITY.recursion;
+levelOptions.lampLights = QUALITY.lampLights;
 
 class Game {
   constructor(saved = {}) {
@@ -68,6 +105,7 @@ class Game {
       restartChamber: document.getElementById('restart-chamber'),
       chambers: document.getElementById('chambers'),
       skins: document.querySelectorAll('[data-skin]'),
+      views: document.querySelectorAll('[data-view]'),
       help: document.getElementById('help'),
       hint: document.getElementById('hint'),
       subtitle: document.getElementById('subtitle'),
@@ -122,6 +160,8 @@ class Game {
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x05070a);
     scene.matrixWorldAutoUpdate = false;
+    // a faint haze so far walls sit back
+    scene.fog = new THREE.Fog(0x0c0f13, 22, 95);
     if (this.halfFloat) {
       const pmrem = new THREE.PMREMGenerator(renderer);
       scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
@@ -157,6 +197,14 @@ class Game {
     this.composerTarget = new THREE.WebGLRenderTarget(1, 1, { type: this.targetType, samples: QUALITY.composerSamples });
     this.composer = new EffectComposer(renderer, this.composerTarget);
     this.composer.addPass(new RenderPass(scene, this.camera));
+    if (QUALITY.ao && this.halfFloat) {
+      // ambient occlusion: soft contact shadows in corners and under things
+      const ao = new AOPass(scene, this.camera, 512, 512);
+      ao.updateGtaoMaterial({ radius: 0.7, distanceExponent: 1.4, thickness: 1.2, scale: 1.1 });
+      ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 12 });
+      ao.blendIntensity = 0.9;
+      this.composer.addPass(ao);
+    }
     this.skin = savedSkin();
     this.viewModel = new ViewModel(1, this.skin);
     // reflections for the glossy device
@@ -168,6 +216,7 @@ class Game {
       this.composer.addPass(new UnrealBloomPass(new THREE.Vector2(256, 256), strength, radius, threshold));
     }
     this.composer.addPass(new OutputPass());
+    this.composer.addPass(new ShaderPass(GradeShader));
   }
 
   initWorld() {
@@ -183,6 +232,7 @@ class Game {
     this.avatar = new Avatar(scene, [1], this.skin);
     this.avatarClone = new Avatar(scene, [0, 1], this.skin);
     this.avatarClone.root.matrixAutoUpdate = false;
+    this.thirdPerson = new ThirdPersonCamera();
     this.effects = new Effects(scene);
     this.sfx = new Sfx();
 
@@ -221,6 +271,10 @@ class Game {
       button.addEventListener('click', () => this.setSkin(button.dataset.skin));
     }
     this.showSkin();
+    for (const button of this.ui.views) {
+      button.addEventListener('click', () => this.setView(button.dataset.view));
+    }
+    this.setView(savedView());
     document.addEventListener('visibilitychange', () => {
       if (document.hidden && this.state.started && !this.state.paused && !this.state.completed) this.pause();
       if (!document.hidden && this.state.started && !this.state.paused && !this.state.completed) this.keepAwake();
@@ -304,6 +358,7 @@ class Game {
       if (e.repeat || this.state.paused) return;
       if (e.code === 'KeyE' || e.code === 'KeyF') this.use();
       if (e.code === 'KeyR' && !this.transition) this.restart();
+      if (e.code === 'KeyV') this.setView(this.view === 'third' ? 'first' : 'third');
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
     window.addEventListener('blur', () => this.keys.clear());
@@ -398,6 +453,29 @@ class Game {
     for (const button of this.ui.skins) button.setAttribute('aria-pressed', String(button.dataset.skin === this.skin));
   }
 
+  // First person, or the over-the-shoulder camera with the player's body in
+  // view. Remembered on this device.
+  setView(view) {
+    this.view = view;
+    const third = view === 'third';
+    this.camera.layers[third ? 'enable' : 'disable'](1);
+    this.viewModel.root.visible = !third;
+    this.thirdPerson.reset();
+    for (const button of this.ui.views) button.setAttribute('aria-pressed', String(button.dataset.view === view));
+    this.dirty = true;
+    try {
+      localStorage.setItem(VIEW_KEY, view);
+    } catch {
+      // not remembered
+    }
+  }
+
+  // Where shots and the grab ray start: the eye, or in third person the
+  // camera boom's pivot beside the head, so they go where the crosshair is.
+  aimOrigin() {
+    return this.view === 'third' ? this.thirdPerson.pivot.clone() : this.player.eye;
+  }
+
   selectChamber(index) {
     this.newGame(index);
     this.showChambers(false);
@@ -440,7 +518,7 @@ class Game {
     this.physics.statics = [];
     this.levelRoot = new THREE.Group();
     this.scene.add(this.levelRoot);
-    buildLevel(this.levelRoot, this.physics, this.materials, def);
+    buildLevel(this.levelRoot, this.physics, this.materials, def, QUALITY.dust);
     this.cube = new WeightedCube(this.levelRoot, def.cube);
     this.button = new FloorButton(this.levelRoot, def.button);
     this.door = new SlidingDoor(this.levelRoot, def.door);
@@ -536,7 +614,7 @@ class Game {
 
   shoot(id) {
     if (this.state.completed || this.transition) return;
-    const eye = this.player.eye;
+    const eye = this.aimOrigin();
     const dir = this.player.forward();
     const P = this.portals.portals[id];
     const before = this.captureTunnelState(P);
@@ -545,7 +623,7 @@ class Game {
     this.state.portalsFired++;
     this.viewModel.fire(id);
     this.sfx.shoot(id);
-    const muzzle = new THREE.Vector3(0.2, -0.17, -0.8).applyMatrix4(this.camera.matrixWorld);
+    const muzzle = this.view === 'third' ? this.avatar.muzzle() : new THREE.Vector3(0.2, -0.17, -0.8).applyMatrix4(this.camera.matrixWorld);
     if (res.ok) this.onPortalMoved(P, before);
     if (res.point) {
       this.effects.shoot(muzzle, res.point, id, () => {
@@ -620,9 +698,9 @@ class Game {
   // Ray from the eye that can pass through one portal. Returns { via } when
   // the cube is within reach.
   lookAtCube() {
-    let origin = this.player.eye;
+    let origin = this.aimOrigin();
     let dir = this.player.forward();
-    let remaining = PLAYER.reach;
+    let remaining = PLAYER.reach + (this.view === 'third' ? 0.4 : 0);
     let via = null;
     const box = this.cube.body.syncBox();
     const grab = { min: box.min.map((v) => v - 0.1), max: box.max.map((v) => v + 0.1) };
@@ -912,8 +990,9 @@ class Game {
   holdTarget() {
     const eye = this.player.eye;
     const fwd = this.player.forward();
-    const target = eye.addScaledVector(fwd, CUBE.holdDistance);
-    target.y -= 0.1;
+    const third = this.view === 'third';
+    const target = eye.addScaledVector(fwd, CUBE.holdDistance * (third ? 0.85 : 1));
+    target.y -= third ? 0.35 : 0.1;
     // keep the cube out of the player's own body
     const dx = target.x - this.player.body.pos.x, dz = target.z - this.player.body.pos.z;
     const minD = PLAYER.half[0] + CUBE.size / 2 + 0.08;
@@ -989,24 +1068,32 @@ class Game {
 
   frameUpdate(dt) {
     const t = this.elapsed;
+    atmosphereTime.value = t;
     this.player.updateView(dt);
     this.portals.update(dt, t);
     this.effects.update(dt);
     this.cube.updateVisual(dt);
 
-    this.camera.position.copy(this.player.eye);
-    this.player.quaternion(this.camera.quaternion);
-    this.camera.updateMatrixWorld();
+    if (this.view === 'third') {
+      this.thirdPerson.update(dt, this.camera, this.player, this.physics, this.door.boxes, (o, d, t) => this.rayPortal(o, d, t));
+    } else {
+      this.camera.position.copy(this.player.eye);
+      this.player.quaternion(this.camera.quaternion);
+      this.camera.updateMatrixWorld();
+    }
     this.viewModel.update(dt, t, this.player, this.cube.held);
 
     const body = this.player.body;
     const feet = new THREE.Vector3(body.pos.x, body.min(1), body.pos.z);
     const moving = Math.min(1, this.player.speed / 4) * (body.onGround ? 1 : 0);
-    this.avatar.pose(feet, this.player.yaw, this.player.pitch, this.player.walkPhase, moving, this.viewModel.color);
+    const air = body.onGround ? 0 : 1;
+    this.avatar.pose(feet, this.player.yaw, this.player.pitch, this.player.walkPhase, moving, this.viewModel.color, air, t);
+    // In third person, hide the body when the camera is squeezed into it.
+    this.avatar.root.visible = this.view !== 'third' || this.thirdPerson.length > 0.7;
     const P = body.portalMode;
     this.avatarClone.root.visible = !!(P && P.linked);
     if (this.avatarClone.root.visible) {
-      this.avatarClone.pose(feet, this.player.yaw, this.player.pitch, this.player.walkPhase, moving, this.viewModel.color);
+      this.avatarClone.pose(feet, this.player.yaw, this.player.pitch, this.player.walkPhase, moving, this.viewModel.color, air, t);
       this.avatar.root.updateMatrix();
       this.avatarClone.root.matrix.multiplyMatrices(P.toPartner, this.avatar.root.matrix);
     }
@@ -1033,7 +1120,7 @@ class Game {
     // While rendering a portal view, hide the copy of the body that sits
     // exactly where that view's camera is.
     this.portalRenderer.render(this.camera, (camPos) => {
-      if (!clone.visible) return;
+      if (!clone.visible || this.view === 'third') return;
       cloneHead.set(0, 1.58, 0).applyMatrix4(clone.matrixWorld);
       clone.children.forEach((c) => (c.visible = cloneHead.distanceTo(camPos) > 0.6));
     });
@@ -1150,6 +1237,16 @@ function markCompleted(number) {
   }
 }
 
+const VIEW_KEY = 'portal-clone:view';
+function savedView() {
+  try {
+    if (localStorage.getItem(VIEW_KEY) === 'first') return 'first';
+  } catch {
+    // storage unavailable
+  }
+  return 'third';
+}
+
 const SKIN_KEY = 'portal-clone:skin';
 const SKINS = ['subject', 'arbiter'];
 function savedSkin() {
@@ -1166,7 +1263,7 @@ function savedSkin() {
 // shared surface materials.
 function disposeTree(root, keep) {
   root.traverse((o) => {
-    if (!o.isMesh) return;
+    if (!o.isMesh && !o.isPoints) return;
     o.geometry.dispose();
     for (const m of [].concat(o.material)) {
       if (keep.has(m)) continue;
