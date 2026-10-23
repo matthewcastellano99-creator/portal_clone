@@ -159,6 +159,9 @@ class Game {
     this.composer.addPass(new RenderPass(scene, this.camera));
     this.skin = savedSkin();
     this.viewModel = new ViewModel(1, this.skin);
+    // reflections for the glossy device
+    this.viewModel.scene.environment = scene.environment;
+    this.viewModel.scene.environmentIntensity = 0.4;
     this.composer.addPass(new OverlayPass(this.viewModel.scene, this.viewModel.camera));
     if (this.halfFloat) {
       const { strength, radius, threshold } = RENDER.bloom;
