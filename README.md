@@ -54,7 +54,7 @@ Portals only stick to the **white panels**. Dark metal, the door and the cube st
 - Elevator transitions between levels, with a level card while the next one loads.
 - Floor button, sliding exit door and indicator lights.
 - You can see your own body through portals, and it casts a shadow.
-- Everything is generated in code: textures, models and sound effects. There are no asset files.
+- Everything is generated in code: textures, models, sound effects and the ambient music. There are no asset files.
 
 ## Running locally
 
@@ -105,7 +105,7 @@ npm test
 | `src/cube.js`, `src/entities.js` | Weighted cube, floor button, door, indicator lights, elevators |
 | `src/gun.js`, `src/avatar.js` | First-person portal device and the third-person body |
 | `src/textures.js`, `src/materials.js` | Procedural panel, metal and floor textures |
-| `src/audio.js` | Synthesised sound effects (WebAudio) |
+| `src/audio.js` | Synthesised sound effects and generative ambient music (WebAudio) |
 
 **Rendering.** For each portal, the scene is rendered from a virtual camera behind the other portal into a screen-sized texture. The portal's oval surface then samples that texture at its own screen position, so the view lines up exactly. A clipping plane at the exit portal hides anything between the virtual camera and the exit. If the portal is visible again inside its own view, the camera is pushed through once more. Up to 4 levels are drawn, deepest first, and each level is scissored to the portal's on-screen bounds.
 

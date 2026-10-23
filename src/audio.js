@@ -63,21 +63,106 @@ export class Sfx {
     src.stop(t + dur + 0.05);
   }
 
+  // Slow generative ambient music: soft pad chords drifting through a
+  // looping progression, with sparse bell notes on top, all through a
+  // generated reverb. Notes are scheduled a few seconds ahead from a timer.
   startAmbience() {
     const ctx = this.ctx;
-    const g = ctx.createGain();
-    g.gain.value = 0.035;
-    const lp = ctx.createBiquadFilter();
-    lp.type = 'lowpass';
-    lp.frequency.value = 220;
-    for (const f of [55, 55.4, 110.3]) {
-      const o = ctx.createOscillator();
-      o.type = 'sawtooth';
-      o.frequency.value = f;
-      o.connect(lp);
-      o.start();
+    this.music = ctx.createGain();
+    this.music.gain.setValueAtTime(0.0001, ctx.currentTime);
+    this.music.gain.exponentialRampToValueAtTime(1, ctx.currentTime + 6);
+    this.music.connect(this.master);
+
+    const len = Math.floor(ctx.sampleRate * 4.5);
+    const ir = ctx.createBuffer(2, len, ctx.sampleRate);
+    for (let ch = 0; ch < 2; ch++) {
+      const d = ir.getChannelData(ch);
+      for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
     }
-    lp.connect(g).connect(this.master);
+    const reverb = ctx.createConvolver();
+    reverb.buffer = ir;
+    const wet = ctx.createGain();
+    wet.gain.value = 0.6;
+    reverb.connect(wet).connect(this.music);
+    this.musicIn = ctx.createGain();
+    this.musicIn.connect(this.music);
+    this.musicIn.connect(reverb);
+
+    // Fmaj9, Am7, Dm9, Bbmaj7 (MIDI notes); bells pick from F major pentatonic.
+    this.chords = [
+      [41, 53, 57, 60, 64, 67],
+      [45, 52, 55, 60, 64, 67],
+      [38, 50, 53, 57, 60, 64],
+      [46, 53, 57, 62, 65, 69],
+    ];
+    this.bellNotes = [72, 74, 77, 79, 81, 84, 86];
+    this.chordLen = 9;
+    this.chordIndex = 0;
+    this.nextChord = ctx.currentTime + 0.2;
+    this.nextBell = ctx.currentTime + 3;
+    const tick = () => this.scheduleMusic();
+    tick();
+    setInterval(tick, 500);
+  }
+
+  scheduleMusic() {
+    const ctx = this.ctx;
+    const ahead = ctx.currentTime + 4;
+    const midi = (n) => 440 * Math.pow(2, (n - 69) / 12);
+    while (this.nextChord < ahead) {
+      const t = this.nextChord;
+      const chord = this.chords[this.chordIndex++ % this.chords.length];
+      chord.forEach((n, i) => {
+        this.padNote(midi(n), t, this.chordLen + 3, i === 0 ? 0.05 : 0.022);
+      });
+      this.nextChord += this.chordLen;
+    }
+    while (this.nextBell < ahead) {
+      const t = this.nextBell;
+      const n = this.bellNotes[Math.floor(Math.random() * this.bellNotes.length)];
+      this.bellNote(midi(n), t);
+      if (Math.random() < 0.35) this.bellNote(midi(n - 12), t + 0.6);
+      this.nextBell += 2.5 + Math.random() * 4.5;
+    }
+  }
+
+  // Two slightly detuned sines with a slow swell in and out.
+  padNote(f, t, dur, peak) {
+    const ctx = this.ctx;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(peak, t + 3.5);
+    g.gain.setValueAtTime(peak, t + dur - 4);
+    g.gain.linearRampToValueAtTime(0, t + dur);
+    g.connect(this.musicIn);
+    for (const detune of [-6, 6]) {
+      const o = ctx.createOscillator();
+      o.type = 'sine';
+      o.frequency.value = f;
+      o.detune.value = detune;
+      o.connect(g);
+      o.start(t);
+      o.stop(t + dur + 0.1);
+    }
+  }
+
+  // A soft bell: sine with a quiet overtone and a long decay.
+  bellNote(f, t) {
+    const ctx = this.ctx;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.03, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 4);
+    g.connect(this.musicIn);
+    for (const [mult, amp] of [[1, 1], [2.01, 0.25]]) {
+      const o = ctx.createOscillator();
+      const og = ctx.createGain();
+      o.frequency.value = f * mult;
+      og.gain.value = amp;
+      o.connect(og).connect(g);
+      o.start(t);
+      o.stop(t + 4.1);
+    }
   }
 
   shoot(id) {
