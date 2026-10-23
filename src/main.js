@@ -254,6 +254,10 @@ class Game {
     this.avatarClone = new Avatar(scene, [0, 1], this.skin);
     this.avatarClone.root.matrixAutoUpdate = false;
     this.thirdPerson = new ThirdPersonCamera();
+    // Physics runs in fixed steps; the player and cube are drawn blended
+    // between the last two steps so motion stays smooth at any frame rate.
+    // A teleport (portal, respawn) is drawn as is, never blended across.
+    this.blend = { player: new THREE.Vector3(), cube: new THREE.Vector3(), alpha: 1, snapPlayer: true, snapCube: true };
     this.effects = new Effects(scene);
     this.sfx = new Sfx();
 
@@ -582,6 +586,7 @@ class Game {
 
   // The first chamber starts on the floor; later ones in the arrival elevator.
   spawnPlayer() {
+    this.blend.snapPlayer = this.blend.snapCube = true;
     const { arrival, spawn } = this.level;
     if (arrival) this.player.spawn(arrival.pos, arrival.yaw + Math.PI);
     else this.player.spawn(spawn.pos, spawn.yaw);
@@ -775,6 +780,7 @@ class Game {
         steps++;
       }
       if (steps === 12) this.accumulator = 0;
+      this.blend.alpha = this.accumulator / PHYSICS.fixedStep;
       // A tap on Jump shorter than a frame still counts once.
       if (steps > 0) this.touch.jumpLatch = false;
     }
@@ -831,6 +837,7 @@ class Game {
   // Advance the simulation (also used by tests through window.__game).
   step(seconds, input) {
     const n = Math.round(seconds / PHYSICS.fixedStep);
+    this.blend.alpha = 1;
     for (let i = 0; i < n; i++) this.fixedUpdate(PHYSICS.fixedStep, input);
   }
 
@@ -838,6 +845,10 @@ class Game {
     const input = forcedInput ?? this.input();
     const player = this.player;
     const cube = this.cube;
+    const blend = this.blend;
+    blend.player.copy(player.body.pos);
+    blend.cube.copy(cube.body.pos);
+    blend.snapPlayer = blend.snapCube = false;
 
     if (this.transition) {
       this.updateTransition(h);
@@ -1036,6 +1047,7 @@ class Game {
   }
 
   onPlayerTeleport(P) {
+    this.blend.snapPlayer = true;
     this.sfx.teleport();
     const cube = this.cube;
     if (!cube.held) return;
@@ -1045,6 +1057,7 @@ class Game {
   }
 
   onCubeTeleport(P) {
+    this.blend.snapCube = true;
     const cube = this.cube;
     teleportBody(cube.body, P);
     this.physics.depenetrate(cube.body, cube.body.box);
@@ -1096,19 +1109,24 @@ class Game {
     this.player.updateView(dt);
     this.portals.update(dt, t);
     this.effects.update(dt);
-    this.cube.updateVisual(dt);
+    // where the player and cube are drawn, relative to their physics bodies
+    const blend = this.blend;
+    const blendOffset = (prev, body, snap) => (snap ? new THREE.Vector3() : prev.clone().lerp(body.pos, blend.alpha).sub(body.pos));
+    const playerOffset = blendOffset(blend.player, this.player.body, blend.snapPlayer);
+    const eye = this.player.eye.add(playerOffset);
+    this.cube.updateVisual(dt, blendOffset(blend.cube, this.cube.body, blend.snapCube));
 
     if (this.view === 'third') {
-      this.thirdPerson.update(dt, this.camera, this.player, this.physics, this.door.boxes, (o, d, t) => this.rayPortal(o, d, t));
+      this.thirdPerson.update(dt, this.camera, this.player, eye, this.physics, this.door.boxes, (o, d, t) => this.rayPortal(o, d, t), blend.snapPlayer);
     } else {
-      this.camera.position.copy(this.player.eye);
+      this.camera.position.copy(eye);
       this.player.quaternion(this.camera.quaternion);
       this.camera.updateMatrixWorld();
     }
     this.viewModel.update(dt, t, this.player, this.cube.held);
 
     const body = this.player.body;
-    const feet = new THREE.Vector3(body.pos.x, body.min(1), body.pos.z);
+    const feet = new THREE.Vector3(body.pos.x, body.min(1), body.pos.z).add(playerOffset);
     const moving = Math.min(1, this.player.speed / 4) * (body.onGround ? 1 : 0);
     const air = body.onGround ? 0 : 1;
     this.avatar.pose(feet, this.player.yaw, this.player.pitch, this.player.walkPhase, moving, this.viewModel.color, air, t);

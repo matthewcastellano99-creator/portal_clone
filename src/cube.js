@@ -108,10 +108,12 @@ export class WeightedCube {
     this.activated = on;
   }
 
-  updateVisual(dt) {
+  // `offset` moves the drawn cube off its physics body (see Game.blend).
+  updateVisual(dt, offset) {
     if (!this.held) snapQuaternion(this.visualQuat, this.targetQuat);
     this.visualQuat.slerp(this.targetQuat, 1 - Math.exp(-12 * dt));
     this.mesh.position.copy(this.body.pos);
+    if (offset) this.mesh.position.add(offset);
     this.mesh.quaternion.copy(this.visualQuat);
     this.glow.lerp(this.activated ? GLOW_ACTIVE : GLOW_IDLE, 1 - Math.exp(-6 * dt));
     this.material.emissive.copy(this.glow);
