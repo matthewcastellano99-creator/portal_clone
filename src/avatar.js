@@ -46,10 +46,10 @@ export class Avatar {
   // A test subject in an orange jumpsuit tied at the waist, a white tank top
   // and long-fall boots with their curved heel springs, hair in a ponytail.
   buildSubject() {
-    const suit = new THREE.MeshStandardMaterial({ color: 0xd8642a, roughness: 0.82, bumpMap: weaveBump([10, 6]), bumpScale: 1.2 });
-    const tank = new THREE.MeshStandardMaterial({ color: 0xe9e7e2, roughness: 0.85, bumpMap: weaveBump([8, 6]), bumpScale: 0.8 });
+    const suit = new THREE.MeshStandardMaterial({ color: 0xd8642a, roughness: 0.82, normalMap: weaveBump([10, 6]), normalScale: new THREE.Vector2(0.72, 0.72) });
+    const tank = new THREE.MeshStandardMaterial({ color: 0xe9e7e2, roughness: 0.85, normalMap: weaveBump([8, 6]), normalScale: new THREE.Vector2(0.48, 0.48) });
     const skin = new THREE.MeshStandardMaterial({ color: 0xc99272, roughness: 0.55 });
-    const hair = new THREE.MeshStandardMaterial({ color: 0x2b1a12, roughness: 0.6, bumpMap: weaveBump([2, 12]), bumpScale: 1.5 });
+    const hair = new THREE.MeshStandardMaterial({ color: 0x2b1a12, roughness: 0.6, normalMap: weaveBump([2, 12]), normalScale: new THREE.Vector2(0.9, 0.9) });
     const boot = new THREE.MeshStandardMaterial({ color: 0x1f2024, roughness: 0.55, metalness: 0.2 });
     const blade = new THREE.MeshPhysicalMaterial({ color: 0xe4e7ea, roughness: 0.25, metalness: 0.4, clearcoat: 1, envMapIntensity: 1.5, side: THREE.DoubleSide });
     const dark = new THREE.MeshStandardMaterial({ color: 0x15161a, roughness: 0.5 });
@@ -145,11 +145,11 @@ export class Avatar {
   buildArbiter() {
     const armor = new THREE.MeshPhysicalMaterial({
       color: 0x9aa1aa, metalness: 0.8, roughness: 0.34, clearcoat: 0.4, clearcoatRoughness: 0.3,
-      envMapIntensity: 1.8, bumpMap: armorBump([1, 1]), bumpScale: 1.2, side: THREE.DoubleSide,
+      envMapIntensity: 1.8, normalMap: armorBump([1, 1]), normalScale: new THREE.Vector2(0.72, 0.72), side: THREE.DoubleSide,
     });
     const trim = new THREE.MeshStandardMaterial({ color: 0x4a4f58, metalness: 0.8, roughness: 0.35, envMapIntensity: 2, side: THREE.DoubleSide });
-    const suit = new THREE.MeshStandardMaterial({ color: 0x24252c, roughness: 0.75, bumpMap: weaveBump([8, 6]), bumpScale: 1.5 });
-    const skin = new THREE.MeshStandardMaterial({ color: 0x564a3b, roughness: 0.6, bumpMap: skinBump([2, 2]), bumpScale: 2 });
+    const suit = new THREE.MeshStandardMaterial({ color: 0x24252c, roughness: 0.75, normalMap: weaveBump([8, 6]), normalScale: new THREE.Vector2(0.9, 0.9) });
+    const skin = new THREE.MeshStandardMaterial({ color: 0x564a3b, roughness: 0.6, normalMap: skinBump([2, 2]), normalScale: new THREE.Vector2(1.2, 1.2) });
     const bone = new THREE.MeshStandardMaterial({ color: 0xd8ccb0, roughness: 0.5 });
     const eye = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffa21a, emissiveIntensity: 2.5 });
     const add = (geo, mat, parent = this.root) => {

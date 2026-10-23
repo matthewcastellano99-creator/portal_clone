@@ -77,6 +77,18 @@ class AOPass extends GTAOPass {
   }
 }
 
+const SanitizeShader = {
+  uniforms: { tDiffuse: { value: null } },
+  vertexShader: `varying vec2 vUv;
+    void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: `uniform sampler2D tDiffuse; varying vec2 vUv;
+    void main() {
+      vec4 c = texture2D(tDiffuse, vUv);
+      if (any(isnan(c)) || any(isinf(c))) c = vec4(0.0, 0.0, 0.0, 1.0);
+      gl_FragColor = min(c, vec4(64.0));
+    }`,
+};
+
 const params = new URLSearchParams(location.search);
 const TOUCH = window.matchMedia('(pointer: coarse)').matches;
 
@@ -212,6 +224,9 @@ class Game {
     this.viewModel.scene.environmentIntensity = 0.4;
     this.composer.addPass(new OverlayPass(this.viewModel.scene, this.viewModel.camera));
     if (this.halfFloat) {
+      // Any stray NaN or infinite pixel would be smeared over the whole
+      // screen by the bloom, so clean them up first.
+      this.composer.addPass(new ShaderPass(SanitizeShader));
       const { strength, radius, threshold } = RENDER.bloom;
       this.composer.addPass(new UnrealBloomPass(new THREE.Vector2(256, 256), strength, radius, threshold));
     }

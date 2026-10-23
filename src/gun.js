@@ -16,7 +16,7 @@ export function buildGunModel(skin = 'subject') {
 function buildPlasmaRifle() {
   const shell = new THREE.MeshPhysicalMaterial({
     color: 0x5a3794, metalness: 0.6, roughness: 0.24, clearcoat: 1, clearcoatRoughness: 0.12,
-    iridescence: 0.55, iridescenceIOR: 1.5, envMapIntensity: 1.6, bumpMap: covenantBump([1, 1]), bumpScale: 1.2,
+    iridescence: 0.55, iridescenceIOR: 1.5, envMapIntensity: 1.6, normalMap: covenantBump([1, 1]), normalScale: new THREE.Vector2(0.72, 0.72),
   });
   const plate = new THREE.MeshPhysicalMaterial({
     color: 0x9a7fd0, metalness: 0.7, roughness: 0.2, clearcoat: 1, iridescence: 0.8, envMapIntensity: 1.8, side: THREE.DoubleSide,
@@ -125,11 +125,11 @@ function buildPlasmaRifle() {
 function buildGauntlet() {
   const armor = new THREE.MeshPhysicalMaterial({
     color: 0xb7bdc6, metalness: 0.85, roughness: 0.28, clearcoat: 0.6, clearcoatRoughness: 0.2,
-    envMapIntensity: 1.4, bumpMap: armorBump([1, 1]), bumpScale: 1.5, side: THREE.DoubleSide,
+    envMapIntensity: 1.4, normalMap: armorBump([1, 1]), normalScale: new THREE.Vector2(0.9, 0.9), side: THREE.DoubleSide,
   });
   const trim = new THREE.MeshStandardMaterial({ color: 0x4a4f58, metalness: 0.8, roughness: 0.35, envMapIntensity: 1.2 });
-  const suit = new THREE.MeshStandardMaterial({ color: 0x24252c, roughness: 0.75, bumpMap: weaveBump([6, 4]), bumpScale: 1.5 });
-  const skin = new THREE.MeshStandardMaterial({ color: 0x4f4537, roughness: 0.6, bumpMap: skinBump([1, 1]), bumpScale: 2 });
+  const suit = new THREE.MeshStandardMaterial({ color: 0x24252c, roughness: 0.75, normalMap: weaveBump([6, 4]), normalScale: new THREE.Vector2(0.9, 0.9) });
+  const skin = new THREE.MeshStandardMaterial({ color: 0x4f4537, roughness: 0.6, normalMap: skinBump([1, 1]), normalScale: new THREE.Vector2(1.2, 1.2) });
   const g = new THREE.Group();
   const add = (geo, mat) => {
     const m = new THREE.Mesh(geo, mat);
@@ -181,7 +181,7 @@ function buildGauntlet() {
 function buildPortalDevice() {
   const white = new THREE.MeshPhysicalMaterial({
     color: 0xc9cac8, roughness: 0.35, metalness: 0.0, clearcoat: 0.7, clearcoatRoughness: 0.12,
-    envMapIntensity: 0.8, bumpMap: armorBump([1, 1]), bumpScale: 0.6,
+    envMapIntensity: 0.8, normalMap: armorBump([1, 1]), normalScale: new THREE.Vector2(0.36, 0.36),
   });
   const grey = new THREE.MeshStandardMaterial({ color: 0x9da2a8, roughness: 0.35, metalness: 0.6, envMapIntensity: 1.2, side: THREE.DoubleSide });
   const dark = new THREE.MeshStandardMaterial({ color: 0x24262a, roughness: 0.4, metalness: 0.7, envMapIntensity: 1.2 });

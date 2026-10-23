@@ -134,7 +134,8 @@ export function sweep(points, opts = {}) {
 // Mirror a list of points across x = 0.
 export const mirrorX = (points) => points.map(([x, y, z]) => [-x, y, z]);
 
-// ------------------------------------------------------------ bump textures
+// ------------------------------------------------------------ surface detail
+// Each texture is drawn as a height image and stored as a normal map.
 
 const cache = new Map();
 
@@ -143,7 +144,9 @@ function canvasTexture(key, w, h, draw, repeat = [1, 1]) {
     const c = document.createElement('canvas');
     c.width = w;
     c.height = h;
-    draw(c.getContext('2d'), w, h);
+    const g = c.getContext('2d', { willReadFrequently: true });
+    draw(g, w, h);
+    heightToNormal(g, w, h);
     const tex = new THREE.CanvasTexture(c);
     tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
     tex.anisotropy = 4;
@@ -155,7 +158,32 @@ function canvasTexture(key, w, h, draw, repeat = [1, 1]) {
   return tex;
 }
 
-// A sunken seam with a lit edge, for bump maps (mid grey is flat).
+// Turn the grey height image drawn on a canvas into a tangent-space normal
+// map, in place. (Normal maps rather than bump maps: three.js's bump shading
+// can produce NaN pixels on thin or edge-on surfaces, which bloom then spreads
+// across the screen.)
+function heightToNormal(g, w, h, strength = 2.5) {
+  const img = g.getImageData(0, 0, w, h);
+  const d = img.data;
+  const height = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) height[i] = d[i * 4] / 255;
+  const at = (x, y) => height[((y + h) % h) * w + ((x + w) % w)];
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const nx = -(at(x + 1, y) - at(x - 1, y)) * strength;
+      const ny = (at(x, y + 1) - at(x, y - 1)) * strength;
+      const l = Math.hypot(nx, ny, 1);
+      const i = (y * w + x) * 4;
+      d[i] = (nx / l * 0.5 + 0.5) * 255;
+      d[i + 1] = (ny / l * 0.5 + 0.5) * 255;
+      d[i + 2] = (1 / l * 0.5 + 0.5) * 255;
+      d[i + 3] = 255;
+    }
+  }
+  g.putImageData(img, 0, 0);
+}
+
+// A sunken seam with a lit edge, drawn as height (mid grey is flat).
 function groove(g, draw, width = 3) {
   g.lineCap = 'round';
   g.strokeStyle = 'rgba(255,255,255,0.35)';
